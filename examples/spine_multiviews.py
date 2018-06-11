@@ -78,6 +78,7 @@ lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 
 criterion = nn.CrossEntropyLoss().to(device)
 
+
 # Create and run trainer
 trainer = Trainer(
     model=model,
