@@ -1,1 +1,1 @@
-from .cnndata import PatchCreator, SimpleNeuroData2d
+from .cnndata import PatchCreator, SimpleNeuroData2d, MultiviewsSpineData

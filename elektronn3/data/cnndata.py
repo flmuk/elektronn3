@@ -4,7 +4,7 @@
 # Max Planck Institute of Neurobiology, Munich, Germany
 # Authors: Martin Drawitsch, Philipp Schubert
 
-__all__ = ['PatchCreator', 'SimpleNeuroData2d']
+__all__ = ['PatchCreator', 'SimpleNeuroData2d', 'MultiviewsSpineData']
 
 import logging
 import os
@@ -687,6 +687,45 @@ class SimpleNeuroData2d(data.Dataset):
     def __getitem__(self, index):
         # Get z slices
         inp = self.inp[:, index]
+        target = self.target[index]
+        return inp, target
+
+    def __len__(self):
+        return self.target.shape[0]
+
+    def close_files(self):
+        self.inp_file.close()
+        self.target_file.close()
+
+
+class MultiviewsSpineData(data.Dataset):
+    """
+    Spinal 2D dataset.
+    """
+
+    def __init__(
+            self,
+            inp_path=None,
+            target_path=None,
+            train=True,
+            inp_key='raw', target_key='label'
+    ):
+        super().__init__()
+        cube_id = "train" if train else "valid"
+        if inp_path is None:
+            inp_path = expanduser(f'~/spine_gt_multiview/raw_{cube_id}.h5')
+        if target_path is None:
+            target_path = expanduser(f'~/spine_gt_multiview/label_{cube_id}.h5')
+        self.inp_file = h5py.File(os.path.expanduser(inp_path), 'r')
+        self.target_file = h5py.File(os.path.expanduser(target_path), 'r')
+        self.inp = self.inp_file[inp_key].value.astype(np.float32) / 255
+        self.target = self.target_file[target_key].value.astype(np.int64)
+        self.target = self.target[:, 0]
+
+        self.close_files()  # Using file contents from memory -> no need to keep the file open.
+
+    def __getitem__(self, index):
+        inp = self.inp[index]
         target = self.target[index]
         return inp, target
 
