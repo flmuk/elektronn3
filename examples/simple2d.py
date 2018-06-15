@@ -28,6 +28,10 @@ parser.add_argument(
     '-m', '--max-steps', type=int, default=500000,
     help='Maximum number of training steps to perform.'
 )
+parser.add_argument(
+    '-r', '--resume', metavar='PATH',
+    help='Path to pretrained model state dict from which to resume training.'
+)
 args = parser.parse_args()
 
 if not args.disable_cuda and torch.cuda.is_available():
@@ -41,7 +45,7 @@ print(f'Running on device: {device}')
 import elektronn3
 elektronn3.select_mpl_backend('Agg')
 
-from elektronn3.training import Trainer
+from elektronn3.training import Trainer, Backup
 from elektronn3.data import SimpleNeuroData2d
 
 torch.manual_seed(0)
@@ -63,6 +67,8 @@ model = nn.Sequential(
     nn.Conv2d(32, 32, 3, padding=1), nn.ReLU(),
     nn.Conv2d(32, 2, 1)
 ).to(device)
+if args.resume is not None:  # Load pretrained network params
+    model.load_state_dict(torch.load(os.path.expanduser(args.resume)))
 
 # Specify data set
 train_dataset = SimpleNeuroData2d(train=True)
@@ -79,7 +85,7 @@ lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 
 criterion = nn.CrossEntropyLoss().to(device)
 
-# Create and run trainer
+# Create trainer
 trainer = Trainer(
     model=model,
     criterion=criterion,
@@ -93,4 +99,9 @@ trainer = Trainer(
     exp_name=args.exp_name,
     schedulers={"lr": lr_sched}
 )
+
+# Archiving training script, src folder, env info
+bk = Backup(script_path=__file__,save_path=trainer.save_path).archive_backup()
+
+# Start training
 trainer.train(max_steps)

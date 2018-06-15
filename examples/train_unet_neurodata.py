@@ -25,6 +25,10 @@ parser.add_argument(
     '-m', '--max-steps', type=int, default=500000,
     help='Maximum number of training steps to perform.'
 )
+parser.add_argument(
+    '-r', '--resume', metavar='PATH',
+    help='Path to pretrained model state dict from which to resume training.'
+)
 args = parser.parse_args()
 
 if not args.disable_cuda and torch.cuda.is_available():
@@ -39,11 +43,11 @@ import elektronn3
 elektronn3.select_mpl_backend('Agg')
 
 from elektronn3.data import PatchCreator
-from elektronn3.training import Trainer, DiceLoss
+from elektronn3.training import Trainer, Backup, DiceLoss
 from elektronn3.models.unet import UNet
 
-torch.manual_seed(0)
 
+torch.manual_seed(0)
 
 # USER PATHS
 save_root = os.path.expanduser('~/e3training/')
@@ -72,6 +76,8 @@ model = UNet(
     activation='relu',
     batch_norm=True
 ).to(device)
+if args.resume is not None:  # Load pretrained network params
+    model.load_state_dict(torch.load(os.path.expanduser(args.resume)))
 
 # Specify data set
 common_data_kwargs = {  # Common options for training and valid sets.
@@ -103,6 +109,7 @@ valid_dataset = PatchCreator(
     warp=0,
     warp_kwargs={
         'sample_aniso': True,
+        'warp_amount': 0.8,  # Strength
     },
     **common_data_kwargs
 )
@@ -120,7 +127,7 @@ lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 criterion = nn.CrossEntropyLoss(weight=train_dataset.class_weights)
 # criterion = DiceLoss()
 
-# Create and run trainer
+# Create trainer
 trainer = Trainer(
     model=model,
     criterion=criterion,
@@ -134,4 +141,9 @@ trainer = Trainer(
     exp_name=args.exp_name,
     schedulers={"lr": lr_sched}
 )
+
+# Archiving training script, src folder, env info
+Backup(script_path=__file__,save_path=trainer.save_path).archive_backup()
+
+# Start training
 trainer.train(max_steps)
