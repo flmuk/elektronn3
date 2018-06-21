@@ -15,10 +15,11 @@ Caution! The input dataset was not manually corrected.
 
 import argparse
 import os
-
+from elektronn3.models.fcn_2d import *
 import torch
 from torch import nn
 from torch import optim
+from elektronn3.training.loss import BlurryBoarderLoss
 
 parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
@@ -40,8 +41,8 @@ print(f'Running on device: {device}')
 import elektronn3
 elektronn3.select_mpl_backend('Agg')
 
-from elektronn3.training import Trainer
-from elektronn3.data import MultiviewsSpineData
+from elektronn3.training import Trainer, Backup
+from elektronn3.data.cnndata import MultiviewData
 
 torch.manual_seed(0)
 
@@ -50,22 +51,24 @@ torch.manual_seed(0)
 save_root = os.path.expanduser('~/e3training/')
 
 max_steps = args.max_steps
-lr = 0.0004
-lr_stepsize = 1000
+lr = 0.004
+lr_stepsize = 500
 lr_dec = 0.995
-batch_size = 1
+batch_size = 10
 
 # Initialize neural network model
-model = nn.Sequential(
-    nn.Conv2d(4, 32, 3, padding=1), nn.ReLU(),
-    nn.Conv2d(32, 32, 3, padding=1), nn.ReLU(),
-    nn.Conv2d(32, 32, 3, padding=1), nn.ReLU(),
-    nn.Conv2d(32, 4, 1)
-).to(device)
-
+# model = nn.Sequential(
+#     nn.Conv2d(4, 32, 3, padding=1), nn.ReLU(),
+#     nn.Conv2d(32, 32, 3, padding=1), nn.ReLU(),
+#     nn.Conv2d(32, 32, 3, padding=1), nn.ReLU(),
+#     nn.Conv2d(32, 4, 1)
+# ).to(device)
+vgg_model = VGGNet(requires_grad=True, in_channels=4)
+model = FCNs(pretrained_net=vgg_model, n_class=4)
+model = nn.DataParallel(model, device_ids=[0, 1])
 # Specify data set
-train_dataset = MultiviewsSpineData(train=True)
-valid_dataset = MultiviewsSpineData(train=False)
+train_dataset = MultiviewData(train=True)
+valid_dataset = MultiviewData(train=False)
 
 # Set up optimization
 optimizer = optim.Adam(
@@ -76,7 +79,7 @@ optimizer = optim.Adam(
 )
 lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 
-criterion = nn.CrossEntropyLoss().to(device)
+criterion = BlurryBoarderLoss().to(device)
 
 # Create and run trainer
 trainer = Trainer(
@@ -90,6 +93,11 @@ trainer = Trainer(
     num_workers=2,
     save_root=save_root,
     exp_name=args.exp_name,
-    schedulers={"lr": lr_sched}
+    schedulers={"lr": lr_sched},
+    ipython_on_error=False
 )
+
+# Archiving training script, src folder, env info
+bk = Backup(script_path=__file__,save_path=trainer.save_path).archive_backup()
+
 trainer.train(max_steps)

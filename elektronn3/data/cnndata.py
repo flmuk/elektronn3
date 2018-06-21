@@ -4,7 +4,7 @@
 # Max Planck Institute of Neurobiology, Munich, Germany
 # Authors: Martin Drawitsch, Philipp Schubert
 
-__all__ = ['PatchCreator', 'SimpleNeuroData2d', 'MultiviewsSpineData']
+__all__ = ['PatchCreator', 'SimpleNeuroData2d']
 
 import logging
 import os
@@ -120,6 +120,9 @@ class PatchCreator(data.Dataset):
             See the docs of this function for information on kwargs options.
             Can be empty.
         random_blurring_config:
+        class_weights: If ``True``, target class weights (for the loss
+            function) are calculated on the available training targets
+            when the class is instantiated.
         epoch_size: Determines the length (``__len__``) of the ``Dataset``
             iterator. ``epoch_size`` can be set to an arbitrary value and
             doesn't have any effect on the content of produced training
@@ -128,6 +131,9 @@ class PatchCreator(data.Dataset):
             validation/logging/plotting are performed by the training loop
             that uses this data set (e.g.
             ``elektronn3.training.trainer.Trainer``).
+        eager_init: If ``False``, some parts of the class initialization
+            are lazily performed only when they are needed.
+            It's not recommended to change this option.
         squeeze_target: If ``True``, target tensors will be squeezed in their
             channel axis if it is empty. This workaround and will be removed
             later. It is currently needed to support targets that have an
@@ -150,7 +156,9 @@ class PatchCreator(data.Dataset):
             warp: Union[bool, float] = False,
             warp_kwargs: Optional[Dict[str, Any]] = None,
             random_blurring_config: Optional[Dict[str, Any]] = None,
+            class_weights: bool = False,
             epoch_size: int = 100,
+            eager_init: bool = True,
             squeeze_target: bool = False,
     ):
         # Early checks
@@ -163,6 +171,10 @@ class PatchCreator(data.Dataset):
                     'sets (auto-calculating them would defeat the purpose of '
                     'having a separate validation set).\n'
                     'Please supply mean and std of your training set.'
+                )
+            if class_weights:
+                raise ValueError(
+                    'Calculating class_weights on validation sets is not allowed.'
                 )
             if warp or random_blurring_config is not None or grey_augment_channels is not None:
                 raise ValueError(
@@ -242,12 +254,23 @@ class PatchCreator(data.Dataset):
         self._mean = mean
         self._std = std
         self.normalize = normalize
-        if self.normalize:
-            # Pre-compute to prevent later redundant computation in multiple processes.
-            _, _ = self.mean, self.std
-        # Load preview data on initialization so read errors won't occur late
-        # and reading doesn't have to be done by each background worker process separately.
-        _ = self.preview_batch
+        if eager_init:
+            if self.normalize:
+                # Pre-compute to prevent later redundant computation in multiple processes.
+                _, _ = self.mean, self.std
+            # Load preview data on initialization so read errors won't occur late
+            # and reading doesn't have to be done by each background worker process separately.
+            _ = self.preview_batch
+        if class_weights:
+            # TODO: This target mean calculation can be expensive. Add support for pre-calculated values, similar to `mean` param. # Not quite sure what you mean, this is done once only anyway
+            # TODO: This assumes a binary segmentation problem (background/foreground). Support more classes?
+            target_mean = np.mean(self.targets)
+            bg_weight = target_mean / (1. + target_mean)
+            fg_weight = 1. - bg_weight
+            self.class_weights = torch.tensor([bg_weight, fg_weight])
+            logger.info(f'Calculated class weights: {[bg_weight, fg_weight]}')
+        else:
+            self.class_weights = None
 
         self.random_blurring_config = random_blurring_config
         if self.random_blurring_config:
@@ -643,7 +666,6 @@ class SimpleNeuroData2d(data.Dataset):
         self.inp = self.inp_file[inp_key].value.astype(np.float32) / 255
         self.target = self.target_file[target_key].value.astype(np.int64)
         self.target = self.target[0]  # Squeeze superfluous first dimension
-
         self.target = self.target[::pool[0], ::pool[1], ::pool[2]]  # Handle pooling (dirty hack TODO)
 
         # Cut inp and target to same size
@@ -675,7 +697,7 @@ class SimpleNeuroData2d(data.Dataset):
         self.target_file.close()
 
 
-class MultiviewsSpineData(data.Dataset):
+class MultiviewData(data.Dataset):
     """
     Spinal 2D dataset.
     """
@@ -689,16 +711,16 @@ class MultiviewsSpineData(data.Dataset):
     ):
         super().__init__()
         cube_id = "train" if train else "valid"
-        if inp_path is None:
-            inp_path = expanduser(f'~/spine_gt_multiview/raw_{cube_id}.h5')
-        if target_path is None:
-            target_path = expanduser(f'~/spine_gt_multiview/label_{cube_id}.h5')
+        if inp_path is None or target_path is None:
+            base_dir = os.path.expanduser("~") + "/spine_gt_multiview/"
+            inp_path = expanduser(f'{base_dir}raw_{cube_id}.h5')
+            target_path = expanduser(f'{base_dir}label_{cube_id}.h5')
         self.inp_file = h5py.File(os.path.expanduser(inp_path), 'r')
         self.target_file = h5py.File(os.path.expanduser(target_path), 'r')
-        self.inp = self.inp_file[inp_key].value.astype(np.float32) / 255
+        self.inp = self.inp_file[inp_key].value
+        self.inp = self.inp[:, :4].astype(np.float32) / 255.
         self.target = self.target_file[target_key].value.astype(np.int64)
         self.target = self.target[:, 0]
-
         self.close_files()  # Using file contents from memory -> no need to keep the file open.
 
     def __getitem__(self, index):
@@ -712,3 +734,5 @@ class MultiviewsSpineData(data.Dataset):
     def close_files(self):
         self.inp_file.close()
         self.target_file.close()
+
+
