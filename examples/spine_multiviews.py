@@ -10,30 +10,32 @@
 Workflow of spinal semantic segmentation based on multiviews (2D semantic segmentation).
 
 It learns how to differentiate between spine head, spine neck and spine shaft.
-Caution! The input dataset was not manually corrected.
 """
 
 import argparse
 import os
 from elektronn3.models.fcn_2d import *
-from elektronn3.models.tiramisu_2d import FCDenseNet
+#from elektronn3.models.tiramisu_2d import FCDenseNet
+#from elektronn3.models.seg_net import SegNet, vgg19_bn
 import torch
 from torch import nn
 from torch import optim
-from elektronn3.training.loss import BlurryBoarderLoss
+from elektronn3.training.loss import LovaszLoss
+#LovaszLoss,DiceLoss, BlurryBoarderLoss
 
 
 def get_model():
-    # vgg_model = VGGNet(model='vgg13', requires_grad=True, in_channels=4)
-    # model = FCNs(pretrained_net=vgg_model, n_class=5)
-    model = FCDenseNet(in_channels=4, n_classes=5)
+    vgg_model = VGGNet(model='vgg13', requires_grad=True, in_channels=4)
+    model = FCNs(pretrained_net=vgg_model, n_class=5)
+    #vgg_model = vgg19_bn()
+    #model = SegNet(pretrained_net=vgg_model, num_classes=5)
+    #model = FCDenseNet(in_channels=4, n_classes=5)
     return model
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-    parser.add_argument('-n', '--exp-name', default="tiramisu", help='Manually set experiment name')
+    parser.add_argument('-n', '--exp-name', default="FCN_2D_LovaszLoss", help='Manually set experiment name')
     parser.add_argument(
         '-m', '--max-steps', type=int, default=500000,
         help='Maximum number of training steps to perform.'
@@ -88,7 +90,7 @@ if __name__ == "__main__":
     )
     lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 
-    criterion = BlurryBoarderLoss().to(device)
+    criterion = LovaszLoss().to(device)
 
     # Create and run trainer
     trainer = Trainer(

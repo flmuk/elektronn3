@@ -27,7 +27,6 @@ def dice_loss(probs, target, weight=1., eps=0.0001):
     # Probs need to be softmax probabilities, not raw network outputs
     onehot_target = torch.zeros_like(probs)
     onehot_target.scatter_(1, target.unsqueeze(1), 1)
-
     intersection = probs * onehot_target
     numerator = 2 * _channelwise_sum(intersection)
     denominator = probs + onehot_target

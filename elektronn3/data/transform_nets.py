@@ -1,3 +1,8 @@
+"""""
+PointNet input data transformation
+from https://github.com/charlesq34/pointnet/blob/master/models/transform_nets.py
+"""""
+
 import tensorflow as tf
 import numpy as np
 import sys

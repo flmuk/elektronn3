@@ -21,6 +21,7 @@ from torch.utils import data
 
 from elektronn3.data import coord_transforms, transforms
 from elektronn3.data.utils import slice_h5
+from syconn.proc.graphs import create_graph_from_coords, split_subcc
 
 logger = logging.getLogger('elektronn3log')
 
@@ -619,7 +620,7 @@ class SimpleNeuroData2d(data.Dataset):
 
 class MultiviewData(data.Dataset):
     """
-    Spinal 2D dataset.
+    2D multiviews of spinal dataset.
     """
 
     def __init__(
@@ -654,5 +655,50 @@ class MultiviewData(data.Dataset):
     def close_files(self):
         self.inp_file.close()
         self.target_file.close()
+
+class PointCNNData(data.Dataset):
+    """ Point cloud dataset class for PointCNN.
+    """
+
+    def __init__(
+            self,
+            inp_path=None,
+            target_path=None,
+            train=True,
+            inp_key='raw', target_key='label',
+            transform: Callable = transforms.Identity()
+    ):
+        super().__init__()
+        #TODO for PointNet set loc and additionally scale=0)
+        sso_id = int(re.findall("/(\d+).", inp_path)[0])
+        if inp_path is None or target_path is None:
+            base_dir = os.path.expanduser("~") + "/spine_gt_pointcloud/gt_phil"
+            inp_path = expanduser(f'{base_dir}_sso_{sso_id}_raw.npy') #TODO
+            target_path = expanduser(f'{base_dir}_sso_{sso_id}_label.npy')
+        self.inp_file = np.load(os.path.expanduser(inp_path), 'r')
+        self.target_file = np.load(os.path.expanduser(target_path), 'r')
+        self.inp = self.inp_file[inp_key].value
+        self.target = self.target_file[target_key].value.astype(np.int64)
+        self.close_files()  # Using file contents from memory -> no need to keep the file open.
+        self.transform = transform
+
+    def __getitem__(self, index):
+        inp = self.inp[index]
+        target = self.target[index]
+        ixs = np.arange(len(inp))
+        np.random.shuffle(ixs)
+        n_points = np.random.normal(loc=2048.0, scale=256, size=None)
+        inp = inp[ixs][:n_points]
+        target = target[ixs][:n_points]
+        inp, target = self.transform(inp, target)
+        return inp, target
+
+    def __len__(self):
+        return self.target.shape[0]
+
+    def close_files(self):
+        self.inp_file.close()
+        self.target_file.close()
+
 
 
