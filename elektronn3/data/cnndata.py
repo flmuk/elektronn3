@@ -246,13 +246,10 @@ class PatchCreator(data.Dataset):
                 # TODO: Limit validation data warping
                 inp, target = self.warp_cut(input_src, target_src, self.warp, self.warp_kwargs)
                 target = target.astype(self._target_dtype)
-                # Arbitrarily choosing 100 as the threshold here, because we
-                # currently can't find out the total number of classes in the
-                # data set automatically. The assumption here is that no one
-                # wants to use elektronn3 with a data set that actually
-                # contains more than 100 classes for the target labels.
+
                 # TODO: Remove this stupid check ASAP once https://github.com/ELEKTRONN/elektronn3/issues/10 is fixed.
-                if target.max() > 100:
+                # Assuming classes are [0, 1, ..., num_classes - 1]
+                if target.max() > self.num_classes - 1:
                     # TODO: Find out where to catch this early / prevent this issue from happening
                     logger.warning(f'invalid target: max = {target.max()}. Skipping batch...')
                     continue
@@ -617,7 +614,6 @@ class SimpleNeuroData2d(data.Dataset):
         self.target_file.close()
 
 
-
 class MultiviewData(data.Dataset):
     """
     2D multiviews of spinal dataset.
@@ -628,7 +624,8 @@ class MultiviewData(data.Dataset):
             inp_path=None,
             target_path=None,
             train=True,
-            inp_key='raw', target_key='label'
+            inp_key='raw', target_key='label',
+            transform: Callable = transforms.Identity()
     ):
         super().__init__()
         cube_id = "train" if train else "valid"
@@ -642,11 +639,15 @@ class MultiviewData(data.Dataset):
         self.inp = self.inp[:, :4].astype(np.float32) / 255.
         self.target = self.target_file[target_key].value.astype(np.int64)
         self.target = self.target[:, 0]
+        if 5 in np.unique(self.target):
+            self.target[self.target ==5] = 4
         self.close_files()  # Using file contents from memory -> no need to keep the file open.
+        self.transform = transform
 
     def __getitem__(self, index):
         inp = self.inp[index]
         target = self.target[index]
+        inp, target = self.transform(inp, target)
         return inp, target
 
     def __len__(self):

@@ -10,32 +10,32 @@
 Workflow of spinal semantic segmentation based on multiviews (2D semantic segmentation).
 
 It learns how to differentiate between spine head, spine neck and spine shaft.
+Caution! The input dataset was not manually corrected.
 """
 
 import argparse
 import os
 from elektronn3.models.fcn_2d import *
-#from elektronn3.models.tiramisu_2d import FCDenseNet
-#from elektronn3.models.seg_net import SegNet, vgg19_bn
+from elektronn3.models.tiramisu_2d import FCDenseNet
+from elektronn3.data.transforms import RandomFlip
+from elektronn3.data import transforms
 import torch
 from torch import nn
 from torch import optim
-from elektronn3.training.loss import LovaszLoss
-#LovaszLoss,DiceLoss, BlurryBoarderLoss
+from elektronn3.training.loss import BlurryBoarderLoss, DiceLoss, LovaszLoss
 
 
 def get_model():
     vgg_model = VGGNet(model='vgg13', requires_grad=True, in_channels=4)
     model = FCNs(pretrained_net=vgg_model, n_class=5)
-    #vgg_model = vgg19_bn()
-    #model = SegNet(pretrained_net=vgg_model, num_classes=5)
-    #model = FCDenseNet(in_channels=4, n_classes=5)
+    # model = FCDenseNet(in_channels=4, n_classes=5)
     return model
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-    parser.add_argument('-n', '--exp-name', default="FCN_2D_LovaszLoss", help='Manually set experiment name')
+    parser.add_argument('-n', '--exp-name', default="FCN--VGG13--Lovasz--NewGT", help='Manually set experiment name')
     parser.add_argument(
         '-m', '--max-steps', type=int, default=500000,
         help='Maximum number of training steps to perform.'
@@ -66,7 +66,7 @@ if __name__ == "__main__":
     lr = 0.004
     lr_stepsize = 500
     lr_dec = 0.99
-    batch_size = 6
+    batch_size = 20
 
     model = get_model()
     if torch.cuda.device_count() > 1:
@@ -76,10 +76,10 @@ if __name__ == "__main__":
         model = nn.DataParallel(model)
     model.to(device)
 
-
     # Specify data set
-    train_dataset = MultiviewData(train=True)
-    valid_dataset = MultiviewData(train=False)
+    transform = transforms.Compose([RandomFlip(ndim_spatial=2), ])
+    train_dataset = MultiviewData(train=True, transform=transform)
+    valid_dataset = MultiviewData(train=False, transform=transform)
 
     # Set up optimization
     optimizer = optim.Adam(

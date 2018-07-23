@@ -18,7 +18,7 @@ References:
     (http://scikit-learn.org/stable/modules/classes.html#classification-metrics).
 
     For example, to get the equivalent output to
-    ``elektronn3.training.metrics.recall(target, pred, num_classes=2, mean=False) / 100``,
+    ``elektronn3.training.metrics.recall(target, pred, num_classes=2, mean=False)``,
     from scikit-learn, you can compute
     ``sklearn.metrics.recall_score(target.view(-1).cpu().numpy(), pred.view(-1).cpu().numpy(), average=None).astype(np.float32)``.
 
@@ -44,6 +44,7 @@ import torch
 #        Actually although it's a bit more effort, I think that's a better
 #        approach than blacklisting via an ``ignore=...` param.
 
+# TODO:
 
 @lru_cache(maxsize=128)
 def confusion_matrix(
@@ -100,58 +101,58 @@ def confusion_matrix(
 
 
 def precision(target, pred, num_classes=2, mean=False):
-    """Precision metric (in %)"""
+    """Precision metric"""
     cm = confusion_matrix(target, pred, num_classes=num_classes)
     tp, tn, fp, fn = cm.transpose(0, 1)  # Transposing to put class axis last
     # Compute metrics for each class simulataneously
     prec = tp / (tp + fp)  # Per-class precision
     if mean:
         prec = prec.mean().item()
-    return prec * 100
+    return prec
 
 
 def recall(target, pred, num_classes=2, mean=False):
-    """Recall metric a.k.a. sensitivity a.k.a. hit rate (in %)"""
+    """Recall metric a.k.a. sensitivity a.k.a. hit rate"""
     cm = confusion_matrix(target, pred, num_classes=num_classes)
     tp, tn, fp, fn = cm.transpose(0, 1)  # Transposing to put class axis last
     rec = tp / (tp + fn)  # Per-class recall
     if mean:
         rec = rec.mean().item()
-    return rec * 100
+    return rec
 
 
 def accuracy(target, pred, num_classes=2, mean=False):
-    """Accuracy metric (in %)"""
+    """Accuracy metric"""
     cm = confusion_matrix(target, pred, num_classes=num_classes)
     tp, tn, fp, fn = cm.transpose(0, 1)  # Transposing to put class axis last
     acc = (tp + tn) / (tp + tn + fp + fn)  # Per-class accuracy
     if mean:
         acc = acc.mean().item()
-    return acc * 100
+    return acc
 
 
 def dice_coefficient(target, pred, num_classes=2, mean=False):
-    """Sørensen–Dice coefficient a.k.a. DSC a.k.a. F1 score (in %)"""
+    """Sørensen–Dice coefficient a.k.a. DSC a.k.a. F1 score"""
     cm = confusion_matrix(target, pred, num_classes=num_classes)
     tp, tn, fp, fn = cm.transpose(0, 1)  # Transposing to put class axis last
     dsc = 2 * tp / (2 * tp + fp + fn)  # Per-class (Sørensen-)Dice similarity coefficient
     if mean:
         dsc = dsc.mean().item()
-    return dsc * 100
+    return dsc
 
 
 def iou(target, pred, num_classes=2, mean=False):
-    """IoU (Intersection over Union) a.k.a. IU a.k.a. Jaccard index (in %)"""
+    """IoU (Intersection over Union) a.k.a. IU a.k.a. Jaccard index"""
     cm = confusion_matrix(target, pred, num_classes=num_classes)
     tp, tn, fp, fn = cm.transpose(0, 1)  # Transposing to put class axis last
     iu = tp / (tp + fp + fn)  # Per-class Intersection over Union
     if mean:
         iu = iu.mean().item()
-    return iu * 100
+    return iu
 
 
 def auroc(target, probs, mean=False):
-    """ Area under Curve (AuC) of the ROC curve (in %).
+    """ Area under Curve (AuC) of the ROC curve.
 
     .. note::
         This implementation uses scikit-learn on the CPU to do the heavy
@@ -174,11 +175,11 @@ def auroc(target, probs, mean=False):
         auc[c] = sklearn.metrics.roc_auc_score(t, p)
     if mean:
         auc = auc.mean().item()
-    return auc * 100
+    return auc
 
 
 def average_precision(target, probs, mean=False):
-    """Average precision (AP) metric based on PR curves (in %).
+    """Average precision (AP) metric based on PR curves.
 
     .. note::
         This implementation uses scikit-learn on the CPU to do the heavy
@@ -201,68 +202,4 @@ def average_precision(target, probs, mean=False):
         ap[c] = sklearn.metrics.average_precision_score(t, p)
     if mean:
         ap = ap.mean().item()
-    return ap * 100
-
-
-@lru_cache(maxsize=128)
-def _softmax(x, dim=1):
-    return torch.nn.functional.softmax(x, dim)
-
-
-@lru_cache(maxsize=128)
-def _argmax(x, dim=1):
-    return x.argmax(dim)
-
-
-# Metric evaluator shortcuts for raw network outputs in binary classification
-#  tasks ("bin_*"). "Raw" means not softmaxed or argmaxed.
-
-def bin_precision(target, out):
-    pred = _argmax(out)
-    return precision(
-        target, pred, num_classes=2, mean=False
-    )[1]  # Take only the score for class 1
-
-
-def bin_recall(target, out):
-    pred = _argmax(out)
-    return recall(
-        target, pred, num_classes=2, mean=False
-    )[1]  # Take only the score for class 1
-
-
-def bin_accuracy(target, out, fast=False):
-    pred = _argmax(out)
-    # return torch.sum(target == pred).item() / target.numel() * 100
-    return accuracy(
-        target, pred, num_classes=2, mean=False
-    )[1]  # Take only the score for class 1
-
-
-def bin_dice_coefficient(target, out):
-    pred = _argmax(out)
-    return dice_coefficient(
-        target, pred, num_classes=2, mean=False
-    )[1]  # Take only the score for class 1
-
-
-def bin_iou(target, out):
-    pred = _argmax(out)
-    return iou(
-        target, pred, num_classes=2, mean=False
-    )[1]  # Take only the score for class 1
-
-
-def bin_average_precision(target, out):
-    probs = _softmax(out)
-    return average_precision(
-        target, probs, mean=False
-    )[1]  # Take only the score for class 1
-
-
-def bin_auroc(target, out):
-    probs = _softmax(out)
-    return auroc(
-        target, probs, mean=False
-    )[1]  # Take only the score for class 1
-
+    return ap
