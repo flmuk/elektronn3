@@ -10,9 +10,12 @@ from syconn.proc.graphs import bfs_smoothing
 from syconn.reps.super_segmentation import SuperSegmentationObject
 import re
 import os
-from syconn.proc.graphs import mesh2batch_gt, mesh2batch
-#from syconn.mp.shared_mem import start_multiprocess_imap
-
+from syconn.proc.graphs import mesh2batch_gt, mesh2batch_gt_coords
+from syconn.mp.shared_mem import start_multiprocess_imap
+from sklearn.model_selection import train_test_split
+import time
+from syconn.reps.super_segmentation_object import SuperSegmentationObject
+start_time = time.time()
 
 # create function that converts information in string type to the information in integer type
 def str2intconverter(comment, gt_type):
@@ -76,17 +79,15 @@ def get_vertex_labels(kzip_path, gt_type="spgt", n_voting=40):
     vertex_labels = node_labels[ind]
 
     vertex_labels = bfs_smoothing(vertices, vertex_labels, n_voting=n_voting)
-    dest_folder = os.path.expanduser("~") + \
-                  "/spine_gt_pointcloud/"
+    dest_folder = os.path.expanduser("~") + "/spine_gt_pointcloud/"
     if not os.path.isdir(dest_folder):
         os.makedirs(dest_folder)
     np.save('{}/sso_{}_verts.k.zip'.format(dest_folder, sso_id), vertices)
     np.save('{}/sso_{}_vertlabels.k.zip'.format(dest_folder, sso_id), vertex_labels)
-
     return vertices, vertex_labels
 
 
-def point_GT_generation(vertices, vertex_labels, dest_dir=None): #PATHES
+def point_GT_generation(vertices_paths, vertex_labels_paths, dest_dir=None): #PATHS
     """
     Generates a .npy GT file from all kzip paths.
     Parameters
@@ -95,35 +96,75 @@ def point_GT_generation(vertices, vertex_labels, dest_dir=None): #PATHES
     -------
     """
     if dest_dir is None:
-        dest_dir = os.path.expanduser("~") + "/spine_gt_pointcloud/"
-    #params = [(p) for p in npy_paths]
-    #res = start_multiprocess_imap(gt_generation_helper, params, nb_cpus=5,
-                                  #debug=False)
-    batch, batch_label = mesh2batch_gt(vertices, vertex_labels)
-    sso_id = int(re.findall("/(\d+).", vertices)[0])
-    print("Writing npy files.")
-    np.save('{}/sso_{}_raw'.format(dest_dir, sso_id), batch)
-    np.save('{}/sso_{}_label'.format(dest_dir, sso_id), batch_label)
+        dest_dir = os.path.expanduser("~") + "/spine_gt_pointcloud/gt_mesh2batch_loc"
+    params = [(vp, vlp) for vp, vlp in zip(vertices_paths, vertex_labels_paths)]
+    res = start_multiprocess_imap(gt_generation_helper, params, nb_cpus=5,
+                                  debug=False)
 
-#def gt_generation_helper(args):
-    #vertices, vertex_labels = get_vertex_labels(kzip_path, gt_type="spgt", n_voting=40)
-    #vertices, vertex_labels = args
-    #batch, batch_label = mesh2batch_gt(vertices, vertex_labels)
-    #return batch, batch_label
+    # Create Dataset splits for training and validation
+    all_raw_data = []
+    all_label_data = []
+    for i in range(len(vertices_paths)):
+        all_raw_data.append(res[i][0])
+        all_label_data.append(res[i][1])
+    all_raw_data_c = np.concatenate(all_raw_data)
+    all_label_data_c = np.concatenate(all_label_data)
+    print("Shuffling batches.")
+    np.random.seed(0)
+    ixs = np.arange(len(all_raw_data))
+    np.random.shuffle(ixs)
+    all_raw_data = all_raw_data_c[ixs]
+    all_label_data = all_label_data_c[ixs]
+    raw_train, raw_valid, label_train, label_valid = \
+        train_test_split(all_raw_data, all_label_data, train_size=0.85, shuffle=False)
+    print("Writing npy files.")
+    for path in vertices_paths:
+        sso_id = int(re.findall("_(\d+)_", path)[0])
+        np.save('{}/sso_{}_raw_train.npy'.format(dest_dir, sso_id), raw_train)
+        np.save('{}/sso_{}_label_train.npy'.format(dest_dir, sso_id), label_train)
+        np.save('{}/sso_{}_raw_valid.npy'.format(dest_dir, sso_id), raw_valid)
+        np.save('{}/sso_{}_label_valid.npy'.format(dest_dir, sso_id), label_valid)
+
+
+def gt_generation_helper(args):
+    vertices_path, vertex_labels_path = args
+    vertices = np.load(vertices_path)
+    vertex_labels = np.load(vertex_labels_path)
+    sso_id = int(re.findall("_(\d+)_", vertices_path)[0])
+    ssv = SuperSegmentationObject(sso_id)
+    start_locs = SuperSegmentationObject.sample_locations(ssv)
+    batch, batch_label = mesh2batch_gt_coords(vertices, vertex_labels, start_locs)
+    return batch, batch_label
+
+def gt_generation_helper_ssv():
+    vertices = np.load(vertices_path)
+    vertex_labels = np.load(vertex_labels_path)
+    sso_id = int(re.findall("_(\d+)_", vertices_path)[0])
+    ssv = SuperSegmentationObject(sso_id)
+    return ssv,
 
 
 if __name__ == "__main__":
-    label_file_folder = "/wholebrain/u/shum/spine_gt_pontcloud/gt_phil"
+    label_file_folder = "/wholebrain/u/shum/spine_gt_pointcloud/gt_phil/"
     file_names_vertices = ["/sso_4741011_verts.k.zip.npy",
-                  "/sso_26331138_verts.k.zip.npy",
-                  "/sso_18279774_verts.k.zip.npy",
-                  "/sso_27965455_verts.k.zip.npy",
-                  "/sso_23044610_verts.k.zip.npy"]
+                           "/sso_23044610_verts.k.zip.npy",
+                           "/sso_18279774_verts.k.zip.npy",
+                           "/sso_26331138_verts.k.zip.npy",
+                           "/sso_27965455_verts.k.zip.npy"]
     file_names_vertlabels = ["/sso_4741011_vertlabels.k.zip.npy",
-                             "/sso_26331138_vertlabels.k.zip.npy",
+                             "/sso_23044610_vertlabels.k.zip.npy",
                              "/sso_18279774_vertlabels.k.zip.npy",
-                             "/sso_27965455_vertlabels.k.zip.npy",
-                             "/sso_23044610_vertlabels.k.zip.npy"]
+                             "/sso_26331138_vertlabels.k.zip.npy",
+                             "/sso_27965455_vertlabels.k.zip.npy"]
     file_paths_vertices = [label_file_folder + "/" + fname for fname in file_names_vertices][::-1]
     file_paths_vertlabels = [label_file_folder + "/" + fname for fname in file_names_vertlabels][::-1]
     point_GT_generation(file_paths_vertices, file_paths_vertlabels)
+
+
+    # file_names = ["/23044610.037.k.zip", "/4741011.074.k.zip",
+    #               "/18279774.089.k.zip", "/26331138.046.k.zip",
+    #               "/27965455.039.k.zip"]
+    # file_paths = [label_file_folder + "/" + fname for fname in file_names][::-1]
+    #get_vertex_labels(file_paths)
+
+    print("---Runtime is %s seconds ---" % (time.time() - start_time))

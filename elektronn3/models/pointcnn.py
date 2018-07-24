@@ -1,13 +1,18 @@
+# ELEKTRONN3 - Neural Network Toolkit
+#
+# Copyright (c) 2017 - now
+# Max Planck Institute of Neurobiology, Munich, Germany
 """
 PointCNN
-from https://github.com/yangyanli/PointCNN/blob/master/pointcnn.py
+This code is based on https://github.com/yangyanli/PointCNN/blob/master/pointcnn.py
 """
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
 import math
-import elektronn3.models.pointfly as pf
+from . import pointfly as pf
+from . import tf_sampling
 import tensorflow as tf
 
 

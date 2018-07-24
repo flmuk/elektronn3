@@ -21,6 +21,7 @@ from torch.utils import data
 
 from elektronn3.data import coord_transforms, transforms
 from elektronn3.data.utils import slice_h5
+import re
 from syconn.proc.graphs import create_graph_from_coords, split_subcc
 
 logger = logging.getLogger('elektronn3log')
@@ -639,12 +640,13 @@ class PointCNNData(data.Dataset):
             transform: Callable = transforms.Identity()
     ):
         super().__init__()
+        cube_id = "train" if train else "valid"
         #TODO for PointNet set loc and additionally scale=0)
         sso_id = int(re.findall("/(\d+).", inp_path)[0])
         if inp_path is None or target_path is None:
-            base_dir = os.path.expanduser("~") + "/spine_gt_pointcloud/gt_phil"
-            inp_path = expanduser(f'{base_dir}_sso_{sso_id}_raw.npy') #TODO
-            target_path = expanduser(f'{base_dir}_sso_{sso_id}_label.npy')
+            base_dir = os.path.expanduser("~") + "/spine_gt_pointcloud/"
+            inp_path = expanduser(f'{base_dir}sso_{sso_id}_raw_{cube_id}.npy')
+            target_path = expanduser(f'{base_dir}sso_{sso_id}_label_{cube_id}.npy')
         self.inp_file = np.load(os.path.expanduser(inp_path), 'r')
         self.target_file = np.load(os.path.expanduser(target_path), 'r')
         self.inp = self.inp_file[inp_key].value
@@ -669,6 +671,9 @@ class PointCNNData(data.Dataset):
     def close_files(self):
         self.inp_file.close()
         self.target_file.close()
+
+
+
 
 
 

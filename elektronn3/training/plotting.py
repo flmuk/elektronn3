@@ -11,8 +11,8 @@ from collections import OrderedDict
 
 import numpy as np
 import seaborn as sns
-#import matplotlib
-#matplotlib.use("agg")
+import matplotlib
+matplotlib.use("agg")
 from matplotlib import pyplot as plt
 #plt.switch_backend('agg')
 from scipy import stats
