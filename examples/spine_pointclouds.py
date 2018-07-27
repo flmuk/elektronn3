@@ -11,18 +11,16 @@ It learns how to differentiate between spine head, spine neck and spine shaft.
 # Copyright (c) 2017 - now
 # Max Planck Institute of Neurobiology, Munich, Germany
 # Authors: Martin Drawitsch, Philipp Schubert
-
+import matplotlib
+matplotlib.use("agg", force=True, warn=False)
 import argparse
 import os
 from elektronn3.models.pointcnn_pytorch import Classifier
-from elektronn3.models.util_funcs import knn_indices_func_gpu, knn_indices_func_cpu
-from elektronn3.models.util_layers import Dense
-from elektronn3.data.transforms import RandomFlip
-from elektronn3.data import transforms
 import torch
 from torch import nn
 from torch import optim
 from elektronn3.training.loss import BlurryBoarderLoss, DiceLoss, LovaszLoss
+from torch.nn import CrossEntropyLoss
 
 
 def get_model():
@@ -32,15 +30,23 @@ def get_model():
     return model
 
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-    parser.add_argument('-n', '--exp-name', default="FCN--VGG13--Lovasz--NewGT", help='Manually set experiment name')
+    parser.add_argument('-n', '--exp-name', default="PointCNN_no_loc", help='Manually set experiment name')
     parser.add_argument(
         '-m', '--max-steps', type=int, default=500000,
         help='Maximum number of training steps to perform.'
     )
+
+    parser.add_argument('--num_point', type=int, default=1024, help='Point Number [256/512/1024/2048] [default: 1024]')
+    parser.add_argument('--max_epoch', type=int, default=2, help='Epoch to run [default: 250]')
+    parser.add_argument('--batch_size', type=int, default=32, help='Batch Size during training [default: 32]')
+    parser.add_argument('--learning_rate', type=float, default=0.001, help='Initial learning rate [default: 0.001]')
+    parser.add_argument('--momentum', type=float, default=0.9, help='Initial learning rate [default: 0.9]')
+    parser.add_argument('--optimizer', default='adam', help='adam or momentum [default: adam]')
+    parser.add_argument('--decay_step', type=int, default=200000, help='Decay step for lr decay [default: 200000]')
+    parser.add_argument('--decay_rate', type=float, default=0.7, help='Decay rate for lr decay [default: 0.8]')
     args = parser.parse_args()
 
     if not args.disable_cuda and torch.cuda.is_available():
@@ -70,18 +76,17 @@ if __name__ == "__main__":
     batch_size = 20
 
     model = get_model()
-    if torch.cuda.device_count() > 1:
-        print("Let's use", torch.cuda.device_count(), "GPUs!")
-        batch_size = batch_size * torch.cuda.device_count()
-        # dim = 0 [20, xxx] -> [10, ...], [10, ...] on 2 GPUs
-        model = nn.DataParallel(model)
+    # if torch.cuda.device_count() > 1:
+    #     print("Let's use", torch.cuda.device_count(), "GPUs!")
+    #     batch_size = batch_size * torch.cuda.device_count()
+    #     # dim = 0 [20, xxx] -> [10, ...], [10, ...] on 2 GPUs
+    #     model = nn.DataParallel(model)
     model.to(device)
 
     # Specify data set
-    transform = transforms.Compose([RandomFlip(ndim_spatial=2), ])
-    train_dataset = PointCNNData(train=True, transform=transform)
-    valid_dataset = PointCNNData(train=False, transform=transform)
-
+    #transform = transforms.Compose([RandomFlip(ndim_spatial=2), ])
+    train_dataset = PointCNNData(train=True) #removed additional transormations for pc
+    valid_dataset = None#PointCNNData(train=False)
 # Set up optimization
     optimizer = optim.Adam(
         model.parameters(),
@@ -91,7 +96,7 @@ if __name__ == "__main__":
     )
     lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 
-    criterion = LovaszLoss().to(device)
+    criterion = CrossEntropyLoss().to(device)
 
     # Create and run trainer
     trainer = Trainer(

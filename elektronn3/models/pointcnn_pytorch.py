@@ -14,7 +14,6 @@ import torch.nn as nn
 from torch import FloatTensor
 import numpy as np
 from typing import Tuple, Callable, Optional
-from elektronn3.models.pointcnn_pytorch import RandPointCNN
 #from elektronn3.models.util_funcs import knn_indices_func_gpu, knn_indices_func_cpu
 
 # Internal Modules
@@ -136,7 +135,7 @@ class PointCNN(nn.Module):
                  r_indices_func: Callable[[UFloatTensor,  # (N, P, dims)
                                            UFloatTensor,  # (N, x, dims)
                                            int, int],
-                                          ULongTensor]  # (N, P, K)
+                                          ULongTensor]  # (N, P, K,)
                  ) -> None:
         """
         :param C_in: Input dimension of the points' features.
@@ -209,7 +208,6 @@ class PointCNN(nn.Module):
         pts_regional = self.select_region(pts, pts_idx)
         fts_regional = self.select_region(fts, pts_idx) if fts is not None else fts
         fts_p = self.x_conv((rep_pts, pts_regional, fts_regional))
-
         return fts_p
 
 
@@ -242,7 +240,7 @@ class RandPointCNN(nn.Module):
         associated with fts[:,p_idx,:].
         :return: Randomly subsampled points and their features.
         """
-        pts, fts = x
+        pts, fts = x#x[..., :-1], x[...,-1:]
         if 0 < self.P < pts.size()[1]:
             # Select random set of indices of subsampled points.
             idx = np.random.choice(pts.size()[1], self.P, replace=False).tolist()
@@ -253,32 +251,38 @@ class RandPointCNN(nn.Module):
         rep_pts_fts = self.pointcnn((rep_pts, pts, fts))
         return rep_pts, rep_pts_fts
 
-lambda points: np.arange(len(points)
-AbbPointCNN = lambda a, b, c, d, e: RandPointCNN(a, b, 3, c, d, e, lambda points)
+pc_inx = lambda rep_points, points, k, d: torch.Tensor(np.arange(len(points))).cuda().to(torch.uint8) # always returns all indices (not using 1st and 3rd argument)
+
+# AbbPointCNN = lambda a, b, c, d, e: RandPointCNN(a, b, 3, c, d, e, pc_inx)
+AbbPointCNN = lambda a,b,c,d,e: RandPointCNN(a, b, 3, c, d, e, knn_indices_func_gpu)
+
 
 class Classifier(nn.Module):
+    """C_in, C_out, D, N_neighbors, dilution, N_rep, r_indices_func, C_lifted = None, mlp_width = 2
+    (a, b, c, d, e) == (C_in, C_out, N_neighbors, dilution, N_rep)
+    Abbreviated PointCNN constructor."""
 
     def __init__(self):
         super(Classifier, self).__init__()
 
-        self.pcnn1 = AbbPointCNN(3, 32, 8, 1, -1)
+        self.pcnn1 = AbbPointCNN(1, 32, 8, 1, -1)
         self.pcnn2 = nn.Sequential(
             AbbPointCNN(32, 64, 8, 2, -1),
             AbbPointCNN(64, 96, 8, 4, -1),
-            AbbPointCNN(96, 128, 12, 4, 120),
-            AbbPointCNN(128, 160, 12, 6, 120)
+            AbbPointCNN(96, 128, 12, 4, -1),
+            AbbPointCNN(128, 160, 12, 6, -1)
         )
 
         self.fcn = nn.Sequential(
             Dense(160, 128),
-            Dense(128, 64, drop_rate=0.5),
-            Dense(64, NUM_CLASS, with_bn=False, activation=None)
+            Dense(128, 64, drop_rate = 0.5),
+            Dense(64, 5, with_bn=False, activation=None), #NUM_OF_CLASSES 5
+            nn.Softmax()
         )
 
     def forward(self, x):
         x = self.pcnn1(x)
         x = self.pcnn2(x)[1]  # grab features
-
-        logits = self.fcn(x)
-        logits_mean = torch.mean(logits, dim=1)
-        return logits_mean
+        x = self.fcn(x)
+        # logits_mean = torch.mean(logits, dim=1)
+        return x

@@ -16,7 +16,7 @@ mpl_backend = 'agg'  # TODO: Make this a CLI option
 elektronn3.select_mpl_backend(mpl_backend)
 
 from elektronn3.data.cnndata import PatchCreator
-from elektronn3.training.trainer import StoppableTrainer
+from elektronn3.training.trainer_pointcnn import StoppableTrainer
 from elektronn3.models.vnet import VNet
 from elektronn3.models.fcn import fcn32s
 from elektronn3.models.simple import Simple3DNet, Extended3DNet, N3DNet

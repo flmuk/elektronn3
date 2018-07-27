@@ -642,36 +642,67 @@ class PointCNNData(data.Dataset):
         super().__init__()
         cube_id = "train" if train else "valid"
         #TODO for PointNet set loc and additionally scale=0)
-        sso_id = int(re.findall("/(\d+).", inp_path)[0])
-        if inp_path is None or target_path is None:
-            base_dir = os.path.expanduser("~") + "/spine_gt_pointcloud/"
+        sso_ids = list([4741011, 18279774, 23044610, 26331138, 27965455])
+        base_dir = os.path.expanduser("~") + "/spine_gt_pointcloud/"
+        self.inp = []
+        self.target = []
+        for sso_id in sso_ids:
             inp_path = expanduser(f'{base_dir}sso_{sso_id}_raw_{cube_id}.npy')
             target_path = expanduser(f'{base_dir}sso_{sso_id}_label_{cube_id}.npy')
-        self.inp_file = np.load(os.path.expanduser(inp_path), 'r')
-        self.target_file = np.load(os.path.expanduser(target_path), 'r')
-        self.inp = self.inp_file[inp_key].value
-        self.target = self.target_file[target_key].value.astype(np.int64)
-        self.close_files()  # Using file contents from memory -> no need to keep the file open.
+            inp_file = np.load(os.path.expanduser(inp_path), 'r')
+            target_file = np.load(os.path.expanduser(target_path), 'r')
+            self.inp.append(inp_file)
+            self.target.append(target_file)
+        self.inp = np.concatenate(self.inp)
+        self.target = np.concatenate(self.target)
         self.transform = transform
+        self.nb_points = int(np.random.normal(loc=2048.0, scale=256, size=None))
+
+    def change_nb_points(self):
+        self.nb_points = int(np.random.normal(loc=2048.0, scale=256, size=None))
 
     def __getitem__(self, index):
+        index = np.random.randint(0,len(self.inp))
         inp = self.inp[index]
         target = self.target[index]
+        n_points = self.nb_points
         ixs = np.arange(len(inp))
         np.random.shuffle(ixs)
-        n_points = np.random.normal(loc=2048.0, scale=256, size=None)
         inp = inp[ixs][:n_points]
         target = target[ixs][:n_points]
         inp, target = self.transform(inp, target)
-        return inp, target
+        return tuple([inp, np.zeros((len(inp), 1))]), target
 
     def __len__(self):
         return self.target.shape[0]
 
     def close_files(self):
-        self.inp_file.close()
-        self.target_file.close()
+        return
 
+
+
+    # def __init__(
+    #         self,
+    #         inp_path=None,
+    #         target_path=None,
+    #         train=True,
+    #         inp_key='raw', target_key='label',
+    #         transform: Callable = transforms.Identity()
+    # ):
+    #     super().__init__()
+    #     cube_id = "train" if train else "valid"
+    #     #TODO for PointNet set loc and additionally scale=0)
+    #     base_dir = os.path.expanduser("~") + "/spine_gt_pointcloud/"
+    #     self.inp = []
+    #     self.target = []
+    #     inp_path = expanduser(f'{base_dir}raw_{cube_id}.npy')
+    #     target_path = expanduser(f'{base_dir}label_{cube_id}.npy')
+    #     self.inp = np.load(os.path.expanduser(inp_path), 'r')
+    #     self.target = np.load(os.path.expanduser(target_path), 'r')
+    #     self.inp = np.concatenate(self.inp)
+    #     self.target = np.concatenate(self.target)
+    #     raise()
+    #     self.transform = transform
 
 
 

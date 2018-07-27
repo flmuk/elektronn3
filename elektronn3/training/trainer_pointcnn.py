@@ -252,17 +252,22 @@ class Trainer:
                 # Other scalars to be logged
                 misc: Dict[str, float] = {}
                 # Hold image tensors for real-time training sample visualization in tensorboard
-                images: Dict[str, torch.Tensor] = {}
+                # images: Dict[str, torch.Tensor] = {}
 
                 running_acc = 0
                 running_mean_target = 0
                 running_vx_size = 0
                 timer = Timer()
                 for inp, target in self.train_loader:
-                    inp, target = inp.to(self.device), target.to(self.device)
-
+                    if type(inp) is list:
+                        inp = [inp[kk].to(self.device).to(torch.float32) for kk in range(len(inp))]
+                    else:
+                        inp = inp.to(self.device).to(torch.float32)
+                    target = target.to(self.device).to(torch.int64)
                     # forward pass
-                    out = self.model(inp)
+                    out = self.model(inp).to(torch.float32)
+                    out = out.view((-1, 5))
+                    target = target.view((-1))
                     loss = self.criterion(out, target)
                     if torch.isnan(loss):
                         logger.error('NaN loss detected! Aborting training.')
@@ -274,10 +279,14 @@ class Trainer:
                     self.optimizer.step()
 
                     # Prevent accidental autograd overheads after optimizer step
-                    inp.detach_()
-                    target.detach_()
-                    out.detach_()
-                    loss.detach_()
+                    if type(inp) is list:
+                        for kk in range(len(inp)):
+                            inp[kk].detach_
+                    else:
+                        inp.detach_()
+                    target.detach()
+                    out.detach()
+                    loss.detach()
 
                     # get training performance
                     stats['tr_loss'] += float(loss)
@@ -287,9 +296,9 @@ class Trainer:
                     self._tracker.update_timeline([self._timer.t_passed, float(loss), mean_target])
 
                     # Preserve training batch and network output for later visualization
-                    images['inp'] = inp
-                    images['target'] = target
-                    images['out'] = out
+                    # images['inp'] = inp
+                    # images['target'] = target
+                    # images['out'] = out
                     # this was changed to support ReduceLROnPlateau which does not implement get_lr
                     misc['learning_rate'] = self.optimizer.param_groups[0]["lr"] # .get_lr()[-1]
                     # update schedules
@@ -303,7 +312,10 @@ class Trainer:
 
                     running_acc += acc
                     running_mean_target += mean_target
-                    running_vx_size += inp.numel()
+                    if type(inp) is list:
+                        running_vx_size += inp[1].numel() // 3
+                    else:
+                        running_vx_size += inp.numel()
 
                     self.step += 1
                     if self.step >= max_steps:
@@ -348,7 +360,7 @@ class Trainer:
                     self.tb_log_scalars(misc, 'misc')
                     if self.previews_enabled:
                         self.tb_log_preview()
-                    self.tb_log_sample_images(images, group='tr_samples')
+                    # self.tb_log_sample_images(images, group='tr_samples')
                     self.tb.writer.flush()
 
                 # Save trained model state
@@ -389,18 +401,19 @@ class Trainer:
 
         val_loss = 0
         stats = {name: 0 for name in self.valid_metrics.keys()}
-        for inp, target in self.valid_loader:
-            inp, target = inp.to(self.device), target.to(self.device)
-            with torch.no_grad():
-                out = self.model(inp)
-                val_loss += self.criterion(out, target).item() / len(self.valid_loader)
-                for name, evaluator in self.valid_metrics.items():
-                    stats[name] += evaluator(target, out) / len(self.valid_loader)
-
-        self.tb_log_sample_images(
-            {'inp': inp, 'out': out, 'target': target},
-            group='val_samples'
-        )
+        # TODO: Make it work for PointCNN
+        # for inp, target in self.valid_loader:
+        #     inp, target = inp.to(self.device), target.to(self.device)
+        #     with torch.no_grad():
+        #         out = self.model(inp)
+        #         val_loss += self.criterion(out, target).item() / len(self.valid_loader)
+        #         for name, evaluator in self.valid_metrics.items():
+        #             stats[name] += evaluator(target, out) / len(self.valid_loader)
+        #
+        # self.tb_log_sample_images(
+        #     {'inp': inp, 'out': out, 'target': target},
+        #     group='val_samples'
+        # )
 
         stats['val_loss'] = val_loss
 

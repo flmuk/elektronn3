@@ -162,4 +162,4 @@ class LayerNorm(nn.Module):
         else:
             raise ValueError("Dimensionality %i not supported" % dim)
 
-self.forward = lambda x: self.bn(x.unsqueeze(0)).squeeze(0)
+            self.forward = lambda x: self.bn(x.unsqueeze(0)).squeeze(0)
