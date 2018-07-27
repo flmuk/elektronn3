@@ -130,8 +130,9 @@ def gt_generation_helper(args):
     vertex_labels = np.load(vertex_labels_path)
     sso_id = int(re.findall("_(\d+)_", vertices_path)[0])
     ssv = SuperSegmentationObject(sso_id)
-    start_locs = SuperSegmentationObject.sample_locations(ssv)
-    batch, batch_label = mesh2batch_gt(vertices, vertex_labels, start_locs)
+    sample_locs = np.concatenate(ssv.sample_locations())
+    raise()
+    batch, batch_label = (vertices, vertex_labels, sample_locs)
     return batch, batch_label
 
 #def gt_generation_helper_ssv():

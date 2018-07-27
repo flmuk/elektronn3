@@ -630,7 +630,6 @@ class MultiviewData(data.Dataset):
 class PointCNNData(data.Dataset):
     """ Point cloud dataset class for PointCNN.
     """
-
     def __init__(
             self,
             inp_path=None,
@@ -642,21 +641,16 @@ class PointCNNData(data.Dataset):
         super().__init__()
         cube_id = "train" if train else "valid"
         #TODO for PointNet set loc and additionally scale=0)
-        sso_ids = list([4741011, 18279774, 23044610, 26331138, 27965455])
         base_dir = os.path.expanduser("~") + "/spine_gt_pointcloud/"
         self.inp = []
         self.target = []
-        for sso_id in sso_ids:
-            inp_path = expanduser(f'{base_dir}sso_{sso_id}_raw_{cube_id}.npy')
-            target_path = expanduser(f'{base_dir}sso_{sso_id}_label_{cube_id}.npy')
-            inp_file = np.load(os.path.expanduser(inp_path), 'r')
-            target_file = np.load(os.path.expanduser(target_path), 'r')
-            self.inp.append(inp_file)
-            self.target.append(target_file)
-        self.inp = np.concatenate(self.inp)
-        self.target = np.concatenate(self.target)
+        inp_path = expanduser(f'{base_dir}raw_{cube_id}.npy')
+        target_path = expanduser(f'{base_dir}label_{cube_id}.npy')
+        self.inp = np.load(os.path.expanduser(inp_path), 'r')
+        self.target = np.load(os.path.expanduser(target_path), 'r')
         self.transform = transform
         self.nb_points = int(np.random.normal(loc=2048.0, scale=256, size=None))
+
 
     def change_nb_points(self):
         self.nb_points = int(np.random.normal(loc=2048.0, scale=256, size=None))
@@ -681,6 +675,9 @@ class PointCNNData(data.Dataset):
 
 
 
+
+    #
+    # #old pointccnn gt
     # def __init__(
     #         self,
     #         inp_path=None,
@@ -692,17 +689,21 @@ class PointCNNData(data.Dataset):
     #     super().__init__()
     #     cube_id = "train" if train else "valid"
     #     #TODO for PointNet set loc and additionally scale=0)
+    #     sso_ids = list([4741011, 18279774, 23044610, 26331138, 27965455])
     #     base_dir = os.path.expanduser("~") + "/spine_gt_pointcloud/"
     #     self.inp = []
     #     self.target = []
-    #     inp_path = expanduser(f'{base_dir}raw_{cube_id}.npy')
-    #     target_path = expanduser(f'{base_dir}label_{cube_id}.npy')
-    #     self.inp = np.load(os.path.expanduser(inp_path), 'r')
-    #     self.target = np.load(os.path.expanduser(target_path), 'r')
+    #     for sso_id in sso_ids:
+    #         inp_path = expanduser(f'{base_dir}sso_{sso_id}_raw_{cube_id}.npy')
+    #         target_path = expanduser(f'{base_dir}sso_{sso_id}_label_{cube_id}.npy')
+    #         inp_file = np.load(os.path.expanduser(inp_path), 'r')
+    #         target_file = np.load(os.path.expanduser(target_path), 'r')
+    #         self.inp.append(inp_file)
+    #         self.target.append(target_file)
     #     self.inp = np.concatenate(self.inp)
     #     self.target = np.concatenate(self.target)
-    #     raise()
     #     self.transform = transform
+    #     self.nb_points = int(np.random.normal(loc=2048.0, scale=256, size=None))
 
 
 

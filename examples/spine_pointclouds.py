@@ -21,6 +21,8 @@ from torch import nn
 from torch import optim
 from elektronn3.training.loss import BlurryBoarderLoss, DiceLoss, LovaszLoss
 from torch.nn import CrossEntropyLoss
+from elektronn3.data import transforms
+from elektronn3.data.transforms import RotatePointCloud, JitterPointCloud
 
 
 def get_model():
@@ -83,10 +85,11 @@ if __name__ == "__main__":
     #     model = nn.DataParallel(model)
     model.to(device)
 
-    # Specify data set
-    #transform = transforms.Compose([RandomFlip(ndim_spatial=2), ])
-    train_dataset = PointCNNData(train=True) #removed additional transormations for pc
+    # Specify data set and augment batched point clouds by rotation and jittering
+    #transform = transforms.Compose([JitterPointCloud, RotatePointCloud])
+    train_dataset = PointCNNData(train=True) #transform = transform)
     valid_dataset = None#PointCNNData(train=False)
+
 # Set up optimization
     optimizer = optim.Adam(
         model.parameters(),
