@@ -209,39 +209,56 @@ class SqueezeTarget:
 #Jittering points clouds (introducing Gaussian noise) and rotating point clouds.
 #Adopted from https://github.com/hxdengBerkeley/PointCNN.Pytorch/blob/master/provider.py
 
-class JitterPointCloud:
-    """ Randomly jitter points. jittering is per point.
+class JitterScalePointCloud:
+    """ Randomly jitter points with Gaussian noise bettwen [-clip, clip]). jittering is per point.
+        scaling will be applied to the jittered points
                Input:
-                 BxNx3 array, original batch of point clouds
+                 Nx3 array, original batch of point clouds
                Return:
-                 BxNx3 array, jittered batch of point clouds
+                 Nx3 array, jittered batch of point clouds
            """
-    def jitter_point_cloud(batch_data, sigma=0.01, clip=0.05):
-        B, N, C = batch_data.shape
-        assert (clip > 0)
-        jittered_data = np.clip(sigma * np.random.randn(B, N, C), -1 * clip, clip)
-        jittered_data += batch_data
-        return jittered_data
+    def __init__(self, sigma: float = 0.1, clip: float = 0.05, scale: np.ndarray = None):
+        self.sigma = sigma
+        self.clip = clip
+        self.scale = scale
+
+    def __call__(
+            self,
+            inp: np.ndarray,
+            target: Optional[np.ndarray] = None  # returned without modifications
+            # TODO: fast in-place version
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        N, C = inp.shape
+        assert (self.clip > 0)
+        jittered_data = np.clip(self.sigma * np.random.randn(N, C), -1 * self.clip, self.clip)
+        jittered_data += inp
+        if self.scale is not None:
+            jittered_data = jittered_data / self.scale
+        return jittered_data, target
+
 
 class RotatePointCloud:
     """ Randomly rotate the point clouds to augument the dataset
                 rotation is per shape based along up direction
                 Input:
-                  BxNx3 array, original batch of point clouds
+                  Nx3 array, original batch of point clouds
                 Return:
-                  BxNx3 array, rotated batch of point clouds
+                  Nx3 array, rotated batch of point clouds
             """
-    def rotate_point_cloud(batch_data):
-        rotated_data = np.zeros(batch_data.shape, dtype=np.float32)
-        for k in range(batch_data.shape[0]):
-            rotation_angle = np.random.uniform() * 2 * np.pi
-            cosval = np.cos(rotation_angle)
-            sinval = np.sin(rotation_angle)
-            rotation_matrix = np.array([[cosval, 0, sinval],
-                                        [0, 1, 0],
-                                        [-sinval, 0, cosval]])
-            shape_pc = batch_data[k, ...]
-            rotated_data[k, ...] = np.dot(shape_pc.reshape((-1, 3)), rotation_matrix)
-            return rotated_data
+
+    def __call__(
+            self,
+            inp: np.ndarray,
+            target: Optional[np.ndarray] = None  # returned without modifications
+            # TODO: fast in-place version
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        rotation_angle = np.random.uniform() * 2 * np.pi
+        cosval = np.cos(rotation_angle)
+        sinval = np.sin(rotation_angle)
+        rotation_matrix = np.array([[cosval, 0, sinval],
+                                    [0, 1, 0],
+                                    [-sinval, 0, cosval]])
+        rotated_data = np.dot(inp, rotation_matrix)
+        return rotated_data, target
 
 

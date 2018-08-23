@@ -262,7 +262,8 @@ class Classifier(nn.Module):
     (a, b, c, d, e) == (C_in, C_out, N_neighbors, dilution, N_rep)
     Abbreviated PointCNN constructor."""
 
-    def __init__(self):
+    def __init__(self, nr_classes=4):
+        self.nr_classes = nr_classes
         super(Classifier, self).__init__()
 
         self.pcnn1 = AbbPointCNN(1, 32, 8, 1, -1)
@@ -275,9 +276,9 @@ class Classifier(nn.Module):
 
         self.fcn = nn.Sequential(
             Dense(160, 128),
-            Dense(128, 64, drop_rate = 0.5),
-            Dense(64, 5, with_bn=False, activation=None), #NUM_OF_CLASSES 5
-            nn.Softmax()
+            Dense(128, 64, drop_rate=0.1), #changed from 0.5 to 0.1
+            Dense(64, nr_classes, with_bn=False, activation=None), #NUM_OF_CLASSES 5
+            nn.LogSoftmax(dim=2)
         )
 
     def forward(self, x):

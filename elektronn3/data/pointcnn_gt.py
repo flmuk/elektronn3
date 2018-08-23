@@ -10,7 +10,7 @@ from syconn.proc.graphs import bfs_smoothing
 from syconn.reps.super_segmentation import SuperSegmentationObject
 import re
 import os
-from syconn.proc.graphs import mesh2batch_gt, mesh2batch_gt_coords
+from syconn.proc.graphs import mesh2batch_gt, mesh2batch_gt_boxes
 from syconn.mp.shared_mem import start_multiprocess_imap
 from sklearn.model_selection import train_test_split
 import time
@@ -96,7 +96,7 @@ def point_GT_generation(vertices_paths, vertex_labels_paths, dest_dir=None): #PA
     -------
     """
     if dest_dir is None:
-        dest_dir = os.path.expanduser("~") + "/spine_gt_pointcloud/gt_mesh2batch_loc/"
+        dest_dir = os.path.expanduser("~") + "/spine_gt_pointcloud/"
     params = [(vp, vlp) for vp, vlp in zip(vertices_paths, vertex_labels_paths)]
     res = start_multiprocess_imap(gt_generation_helper, params, nb_cpus=5,
                                   debug=True)
@@ -131,16 +131,8 @@ def gt_generation_helper(args):
     sso_id = int(re.findall("_(\d+)_", vertices_path)[0])
     ssv = SuperSegmentationObject(sso_id)
     sample_locs = np.concatenate(ssv.sample_locations())
-    raise()
-    batch, batch_label = (vertices, vertex_labels, sample_locs)
+    batch, batch_label = mesh2batch_gt_boxes(vertices, vertex_labels, sample_locs)
     return batch, batch_label
-
-#def gt_generation_helper_ssv():
-    #vertices = np.load(vertices_path)
-    #vertex_labels = np.load(vertex_labels_path)
-    #sso_id = int(re.findall("_(\d+)_", vertices_path)[0])
-    #ssv = SuperSegmentationObject(sso_id)
-    #return ssv,
 
 
 if __name__ == "__main__":

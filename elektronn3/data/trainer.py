@@ -29,11 +29,6 @@ from elektronn3.training import metrics
 from elektronn3.data.utils import squash01
 from elektronn3 import __file__ as arch_src
 
-import matplotlib
-matplotlib.use("agg")
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-
 logger = logging.getLogger('elektronn3log')
 
 try:
@@ -51,15 +46,12 @@ class NaNException(RuntimeError):
 
 class Trainer:
     """ Training loop abstraction with IPython and tensorboard integration.
-
     Hitting Ctrl-C anytime during the training will drop you to the IPython
     training shell where you can access training data and make interactive
     changes.
     To continue training, hit Ctrl-D twice.
     If you want the process to terminate after leaving the shell, set
     ``self.terminate = True`` inside it and then hit Ctrl-D twice.
-
-
     Args:
         model: PyTorch model (``nn.Module``) that shall be trained.
             Please make sure that the output shape of the ``model``
@@ -111,6 +103,12 @@ class Trainer:
             ``exp_name``.
             If ``tensorboard_root_path`` is not set, tensorboard logs are
             written to ``save_path`` (next to model checkpoints, plots etc.).
+        model_has_softmax_outputs: If ``False`` (default),
+            the softmax operation is performed on network outputs before
+            plotting them, so raw network outputs get converted into predicted
+            class probabilities.
+            Set this to ``True`` if the output of ``model`` is already a
+            softmax output.
         ignore_errors: If ``True``, the training process tries to ignore
             all errors and continue with the next batch if it encounters
             an error on the current batch.
@@ -160,6 +158,7 @@ class Trainer:
             overlay_alpha: float = 0.2,
             enable_tensorboard: bool = True,
             tensorboard_root_path: Optional[str] = None,
+            model_has_softmax_outputs: bool = False,
             ignore_errors: bool = False,
             ipython_on_error: bool = False,
             classes: Optional[Sequence[int]] = None,
@@ -177,6 +176,8 @@ class Trainer:
         self.save_root = os.path.expanduser(save_root)
         self.batchsize = batchsize
         self.num_workers = num_workers
+        # TODO: This could be automatically determined by parsing the model
+        self.model_has_softmax_outputs = model_has_softmax_outputs
 
         self._tracker = HistoryTracker()
         self._timer = Timer()
@@ -244,7 +245,6 @@ class Trainer:
     # TODO: Modularize, make some general parts reusable for other trainers.
     def train(self, max_steps: int = 1) -> None:
         """Train the network for ``max_steps`` steps.
-
         After each training epoch, validation performance is measured and
         visualizations are computed and logged to tensorboard."""
         while self.step < max_steps:
@@ -253,26 +253,23 @@ class Trainer:
                 self.model.train()
 
                 # Scalar training stats that should be logged and written to tensorboard later
-                stats: Dict[str, float] = {'tr_loss': 0.0, 'val_accuracy': 0.0}
+                stats: Dict[str, float] = {'tr_loss': 0.0}
                 # Other scalars to be logged
                 misc: Dict[str, float] = {}
                 # Hold image tensors for real-time training sample visualization in tensorboard
-                # images: Dict[str, torch.Tensor] = {}
+                images: Dict[str, torch.Tensor] = {}
 
                 running_acc = 0
                 running_mean_target = 0
                 running_vx_size = 0
                 timer = Timer()
                 for inp, target in self.train_loader:
-                    if type(inp) is list:
-                        inp = [inp[kk].to(self.device).to(torch.float32) for kk in range(len(inp))]
-                    else:
-                        inp = inp.to(self.device).to(torch.float32)
-                    target = target.to(self.device).to(torch.int64)
-                    target = target.view((-1))
+                    inp, target = inp.to(self.device), target.to(self.device)
+
                     # forward pass
-                    out = self.model(inp).to(torch.float32)
-                    out = out.view((-1, self.num_classes))
+                    import pdb
+                    pdb.set_trace()
+                    out = self.model(inp)
                     loss = self.criterion(out, target)
                     if torch.isnan(loss):
                         logger.error('NaN loss detected! Aborting training.')
@@ -284,25 +281,22 @@ class Trainer:
                     self.optimizer.step()
 
                     # Prevent accidental autograd overheads after optimizer step
-                    if type(inp) is list:
-                        for kk in range(len(inp)):
-                            inp[kk].detach_
-                    else:
-                        inp.detach_()
-                    target.detach()
-                    out.detach()
-                    loss.detach()
+                    inp.detach_()
+                    target.detach_()
+                    out.detach_()
+                    loss.detach_()
 
                     # get training performance
                     stats['tr_loss'] += float(loss)
-                    acc = metrics.bin_accuracy(target, out)
+                    acc = metrics.bin_accuracy(target, out)  # TODO
                     mean_target = target.to(torch.float32).mean()
                     print(f'{self.step:6d}, loss: {loss:.4f}', end='\r')
                     self._tracker.update_timeline([self._timer.t_passed, float(loss), mean_target])
 
-                    # images['inp'] = inp
-                    # images['target'] = target
-                    # images['out'] = out
+                    # Preserve training batch and network output for later visualization
+                    images['inp'] = inp
+                    images['target'] = target
+                    images['out'] = out
                     # this was changed to support ReduceLROnPlateau which does not implement get_lr
                     misc['learning_rate'] = self.optimizer.param_groups[0]["lr"] # .get_lr()[-1]
                     # update schedules
@@ -316,10 +310,7 @@ class Trainer:
 
                     running_acc += acc
                     running_mean_target += mean_target
-                    if type(inp) is list:
-                        running_vx_size += inp[1].numel() // 3
-                    else:
-                        running_vx_size += inp.numel()
+                    running_vx_size += inp.numel()
 
                     self.step += 1
                     if self.step >= max_steps:
@@ -335,58 +326,8 @@ class Trainer:
                     valid_stats = self.validate()
                     stats.update(valid_stats)
 
-                # Preserve training batch and network output for later visualization
 
-                # Visualization of input data
-                fig = plt.figure()
-                ax = fig.add_subplot(111, projection='3d')
-                X = inp[0].cpu().data[0][:, 0]
-                Y = inp[0].cpu().data[0][:, 1]
-                Z = inp[0].cpu().data[0][:, 2]
-                ax.scatter(X, Y, Z, c=None, cmap=None)
-                ax.set_xlabel('X Label')
-                ax.set_ylabel('Y Label')
-                ax.set_zlabel('Z Label')
-                plt.savefig(os.path.join(self.save_path, 'input_data_{}.png'.format(self.step)))
-                fig.canvas.draw()
-                img_data = np.array(fig.canvas.renderer._renderer)
-                self.tb.log_image(f'train_input_data', img_data,
-                                  step=self.step)
-                plt.close()
-
-                # Visualization of target data
-
-                # import pdb
-                # pdb.set_trace()
-
-                fig = plt.figure()
-                ax = fig.add_subplot(111, projection='3d')
-                my_cmap = np.array([[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1], [0.1, 0.1, 0.1, 1], [0.05, 0.6, 0.6, 1]])
-                ax.scatter(X, Y, Z, c=my_cmap[np.asarray(target.cpu().data)[:len(X)]])
-                ax.set_xlabel('X Label')
-                ax.set_ylabel('Y Label')
-                ax.set_zlabel('Z Label')
-                fig.canvas.draw()
-                img_data = np.array(fig.canvas.renderer._renderer)
-                self.tb.log_image(f'train_target_data', img_data,
-                                  step=self.step)
-                plt.close()
-
-                # Visualization of output data
-                fig = plt.figure()
-                ax = fig.add_subplot(111, projection='3d')
-                prediction = my_cmap[np.argmax(np.asarray(out.cpu().data)[:len(X)], axis=1)]
-                ax.scatter(X, Y, Z, c = prediction)
-                ax.set_xlabel('X Label')
-                ax.set_ylabel('Y Label')
-                ax.set_zlabel('Z Label')
-                fig.canvas.draw()
-                img_data = np.array(fig.canvas.renderer._renderer)
-                self.tb.log_image(f'train_pred_data', img_data,
-                                  step=self.step)
-                plt.close()
-
-                #Update history tracker (kind of made obsolete by tensorboard)
+                # Update history tracker (kind of made obsolete by tensorboard)
                 # TODO: Decide what to do with this, now that most things are already in tensorboard.
                 if self.step // len(self.train_dataset) > 1:
                     tr_loss_gain = self._tracker.history[-1][2] - stats['tr_loss']
@@ -414,7 +355,7 @@ class Trainer:
                     self.tb_log_scalars(misc, 'misc')
                     if self.previews_enabled:
                         self.tb_log_preview()
-                    # self.tb_log_sample_images(images, group='tr_samples')
+                    self.tb_log_sample_images(images, group='tr_samples')
                     self.tb.writer.flush()
 
                 # Save trained model state
@@ -455,78 +396,25 @@ class Trainer:
 
         val_loss = 0
         stats = {name: 0 for name in self.valid_metrics.keys()}
-
-        running_acc = 0
         for inp, target in self.valid_loader:
-            if type(inp) is list:
-                inp = [inp[kk].to(self.device).to(torch.float32) for kk in range(len(inp))]
-            else:
-                inp = inp.to(self.device).to(torch.float32)
-            target = target.to(self.device).to(torch.int64)
+            inp, target = inp.to(self.device), target.to(self.device)
             with torch.no_grad():
-                out = self.model(inp).to(torch.float32)
-                out = out.view((-1, self.num_classes))
-                target = target.view((-1))
+                out = self.model(inp)
                 val_loss += self.criterion(out, target).item() / len(self.valid_loader)
                 for name, evaluator in self.valid_metrics.items():
                     stats[name] += evaluator(target, out) / len(self.valid_loader)
-            acc = metrics.bin_accuracy(target, out)
-            running_acc += acc
 
-        stats['val_loss'] = float(val_loss)
-        stats['val_accuracy'] = running_acc / len(self.valid_loader)
+        self.tb_log_sample_images(
+            {'inp': inp, 'out': out, 'target': target},
+            group='val_samples'
+        )
 
-        # Visualization of input data
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        X = inp[0].cpu().data[0][:, 0]
-        Y = inp[0].cpu().data[0][:, 1]
-        Z = inp[0].cpu().data[0][:, 2]
-        ax.scatter(X, Y, Z, c=None, cmap=None)
-        ax.set_xlabel('X Label')
-        ax.set_ylabel('Y Label')
-        ax.set_zlabel('Z Label')
-        plt.savefig(os.path.join(self.save_path, 'input_data_{}.png'.format(self.step)))
-        fig.canvas.draw()
-        img_data = np.array(fig.canvas.renderer._renderer)
-        self.tb.log_image(f'val_input_data', img_data,
-                          step=self.step)
-        plt.close()
-
-        # Visualization of target data
-
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        my_cmap = np.array([[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1], [0.1, 0.1, 0.1, 1], [0.05, 0.6, 0.6, 1]])
-        ax.scatter(X, Y, Z, c=my_cmap[np.asarray(target.cpu().data)[:len(X)]])
-        ax.set_xlabel('X Label')
-        ax.set_ylabel('Y Label')
-        ax.set_zlabel('Z Label')
-        fig.canvas.draw()
-        img_data = np.array(fig.canvas.renderer._renderer)
-        self.tb.log_image(f'val_target_data', img_data,
-                          step=self.step)
-        plt.close()
-
-        # Visualization of output data
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        prediction = my_cmap[np.argmax(np.asarray(out.cpu().data)[:len(X)], axis=1)]
-        ax.scatter(X, Y, Z, c=prediction)
-        ax.set_xlabel('X Label')
-        ax.set_ylabel('Y Label')
-        ax.set_zlabel('Z Label')
-        fig.canvas.draw()
-        img_data = np.array(fig.canvas.renderer._renderer)
-        self.tb.log_image(f'val_pred_data', img_data,
-                          step=self.step)
-        plt.close()
+        stats['val_loss'] = val_loss
 
         self.model.train()  # Reset model to training mode
 
         # TODO: Refactor: Either remove side effects (plotting)
         return stats
-
 
     def tb_log_scalars(
             self,
@@ -543,34 +431,29 @@ class Trainer:
     ) -> Callable[[torch.Tensor], np.ndarray]:
         """
         Defines ``batch2img`` function dynamically, depending on tensor shapes.
-
         ``batch2img`` slices a 4D or 5D tensor to (C, H, W) shape, moves it to
         host memory and converts it to a numpy array.
         By arbitrary choice, the first element of a batch is always taken here.
         In the 5D case, the D (depth) dimension is sliced at z_plane.
-
         This function is useful for plotting image samples during training.
-
         Args:
             batch: 4D or 5D tensor, used for shape analysis.
             z_plane: Index of the spatial plane where a 5D image tensor should
                 be sliced. If not specified, this is automatically set to half
                 the size of the D dimension.
-
         Returns:
-            Numpy array of shape (C, H, W), representing a single HxW 2D image
-            with channel dimension C.
+            Function that slices a plottable 2D image out of a torch.Tensor
+            with batch and channel dimensions.
         """
         if batch.dim() == 5:  # (N, C, D, H, W)
             if z_plane is None:
                 z_plane = batch.shape[2] // 2
             assert z_plane in range(batch.shape[2])
-            batch2img = lambda x: x[0, :, z_plane].cpu().numpy()
+            return lambda x: x[0, :, z_plane].cpu().numpy()
         elif batch.dim() == 4:  # (N, C, H, W)
-            batch2img = lambda x: x[0, :].cpu().numpy()
+            return lambda x: x[0, :].cpu().numpy()
         else:
             raise ValueError('Only 4D and 5D tensors are supported.')
-        return batch2img
 
     def tb_log_preview(
             self,
@@ -578,11 +461,12 @@ class Trainer:
             group: str = 'preview_batch'
     ) -> None:
         """ Preview from constant region of preview batch data.
-
         This only works for datasets that have a ``preview_batch`` attribute.
         """
         inp_batch = self.valid_dataset.preview_batch[0].to(self.device)
         out_batch = preview_inference(self.model, inp_batch=inp_batch)
+        if not self.model_has_softmax_outputs:
+            out_batch = out_batch.softmax(1)  # Apply softmax before plotting
 
         batch2img = self._get_batch2img_function(out_batch, z_plane)
 
@@ -590,7 +474,7 @@ class Trainer:
         pred = out.argmax(0)
 
         for c in range(out.shape[0]):
-            self.tb.log_image(f'{group}/c{c}', out[c], self.step)
+            self.tb.log_image(f'{group}/c{c}', out[c], self.step, cmap='gray')
         self.tb.log_image(f'{group}/pred', pred, self.step, num_classes=self.num_classes)
 
         # This is only run once per training, because the ground truth for
@@ -615,15 +499,15 @@ class Trainer:
             group: str = 'sample'
     ) -> None:
         """Preview from last training/validation sample
-
         Since the images are chosen randomly from the training/validation set
         they come from random regions in the data set.
-
         Note: Training images are possibly augmented, so the plots may look
             distorted/weirdly colored.
         """
 
         out_batch = images['out']
+        if not self.model_has_softmax_outputs:
+            out_batch = out_batch.softmax(1)  # Apply softmax before plotting
 
         batch2img = self._get_batch2img_function(out_batch, z_plane)
 
@@ -638,7 +522,7 @@ class Trainer:
         self.tb.log_image(f'{group}/target', target, step=self.step, num_classes=self.num_classes)
 
         for c in range(out.shape[0]):
-            self.tb.log_image(f'{group}/c{c}', out[c], step=self.step)
+            self.tb.log_image(f'{group}/c{c}', out[c], step=self.step, cmap='gray')
         self.tb.log_image(f'{group}/pred', pred, step=self.step, num_classes=self.num_classes)
 
         inp01 = squash01(inp)  # Squash to [0, 1] range for label2rgb and plotting
@@ -671,11 +555,9 @@ def preview_inference(
 class Backup:
     """ Backup class for archiving training script, src folder and environment info.
     Should be used for any future archiving needs.
-
     Args:
         script_path: The path to the training script. Eg. train_unet_neurodata.py
         save_path: The path where the information is archived.
-
     """
     def __init__(self, script_path, save_path):
         self.script_path = script_path
@@ -683,7 +565,6 @@ class Backup:
 
     def archive_backup(self):
         """Archiving the source folder, the training script and environment info.
-
         The training script is saved with the prefix '0-' to distinguish from regular scripts.
         Some of the information saved in the env info is:
         PyTorch version: 0.4.0

@@ -11,6 +11,7 @@ It learns how to differentiate between spine head, spine neck and spine shaft.
 # Copyright (c) 2017 - now
 # Max Planck Institute of Neurobiology, Munich, Germany
 # Authors: Martin Drawitsch, Philipp Schubert
+import numpy as np
 import matplotlib
 matplotlib.use("agg", force=True, warn=False)
 import argparse
@@ -20,9 +21,9 @@ import torch
 from torch import nn
 from torch import optim
 from elektronn3.training.loss import BlurryBoarderLoss, DiceLoss, LovaszLoss
-from torch.nn import CrossEntropyLoss
+from torch.nn import CrossEntropyLoss, NLLLoss
 from elektronn3.data import transforms
-from elektronn3.data.transforms import RotatePointCloud, JitterPointCloud
+from elektronn3.data.transforms import RotatePointCloud, JitterScalePointCloud
 
 
 def get_model():
@@ -35,7 +36,7 @@ def get_model():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-    parser.add_argument('-n', '--exp-name', default="PointCNN_no_loc", help='Manually set experiment name')
+    parser.add_argument('-n', '--exp-name', default="PointCNN_small_batch_size_and_epoch", help='Manually set experiment name')
     parser.add_argument(
         '-m', '--max-steps', type=int, default=500000,
         help='Maximum number of training steps to perform.'
@@ -72,23 +73,27 @@ if __name__ == "__main__":
     save_root = os.path.expanduser('~/e3training/')
 
     max_steps = args.max_steps
-    lr = 0.004
-    lr_stepsize = 500
+    lr = 0.0001
+    lr_stepsize = 1000
     lr_dec = 0.99
-    batch_size = 20
+    batch_size = 2 #set 15
 
     model = get_model()
-    # if torch.cuda.device_count() > 1:
-    #     print("Let's use", torch.cuda.device_count(), "GPUs!")
-    #     batch_size = batch_size * torch.cuda.device_count()
-    #     # dim = 0 [20, xxx] -> [10, ...], [10, ...] on 2 GPUs
-    #     model = nn.DataParallel(model)
+    if torch.cuda.device_count() > 1:
+        print("Let's use", torch.cuda.device_count(), "GPUs!")
+        batch_size = batch_size * torch.cuda.device_count()
+        # dim = 0 [20, xxx] -> [10, ...], [10, ...] on 2 GPUs
+        model = nn.DataParallel(model)
     model.to(device)
 
     # Specify data set and augment batched point clouds by rotation and jittering
-    #transform = transforms.Compose([JitterPointCloud, RotatePointCloud])
-    train_dataset = PointCNNData(train=True) #transform = transform)
-    valid_dataset = None#PointCNNData(train=False)
+    class_names = ['neck', 'head' , 'shaft', 'other']
+    jit = JitterScalePointCloud(scale=np.array([106640 / 2, 109130 / 2, 114000 / 2]),
+                                clip=2)
+    rot = RotatePointCloud()
+    transform = transforms.Compose([jit, rot])
+    train_dataset = PointCNNData(class_names, train=True, transform = transform)
+    valid_dataset = PointCNNData(class_names, train=False, transform = transform)
 
 # Set up optimization
     optimizer = optim.Adam(
@@ -99,7 +104,7 @@ if __name__ == "__main__":
     )
     lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 
-    criterion = CrossEntropyLoss().to(device)
+    criterion = NLLLoss().to(device)
 
     # Create and run trainer
     trainer = Trainer(
@@ -110,7 +115,7 @@ if __name__ == "__main__":
         train_dataset=train_dataset,
         valid_dataset=valid_dataset,
         batchsize=batch_size,
-        num_workers=2,
+        num_workers=6,
         save_root=save_root,
         exp_name=args.exp_name,
         schedulers={"lr": lr_sched},

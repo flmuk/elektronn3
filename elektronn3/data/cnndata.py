@@ -632,6 +632,7 @@ class PointCNNData(data.Dataset):
     """
     def __init__(
             self,
+            classes: list,
             inp_path=None,
             target_path=None,
             train=True,
@@ -640,17 +641,23 @@ class PointCNNData(data.Dataset):
     ):
         super().__init__()
         cube_id = "train" if train else "valid"
-        #TODO for PointNet set loc and additionally scale=0)
         base_dir = os.path.expanduser("~") + "/spine_gt_pointcloud/"
         self.inp = []
         self.target = []
         inp_path = expanduser(f'{base_dir}raw_{cube_id}.npy')
         target_path = expanduser(f'{base_dir}label_{cube_id}.npy')
-        self.inp = np.load(os.path.expanduser(inp_path), 'r')
-        self.target = np.load(os.path.expanduser(target_path), 'r')
+
+        self.inp = np.zeros_like(np.load(os.path.expanduser(inp_path)), dtype=float)
+        self.target = np.zeros_like(np.load(os.path.expanduser(inp_path)), dtype=float)
+
+        #use scaled input data because the data will be scale by the jitter transformation
+        for i in range(len(np.load(os.path.expanduser(inp_path)))):
+            self.inp[i] = np.load(os.path.expanduser(inp_path))[i]\
+                   * np.array([106640 / 2, 109130 / 2, 114000 / 2])
+        self.target = np.load(os.path.expanduser(target_path))
         self.transform = transform
         self.nb_points = int(np.random.normal(loc=2048.0, scale=256, size=None))
-
+        self.classes = classes
 
     def change_nb_points(self):
         self.nb_points = int(np.random.normal(loc=2048.0, scale=256, size=None))
@@ -668,7 +675,8 @@ class PointCNNData(data.Dataset):
         return tuple([inp, np.zeros((len(inp), 1))]), target
 
     def __len__(self):
-        return self.target.shape[0]
+        return 20
+        #return self.target.shape[0]
 
     def close_files(self):
         return
@@ -677,7 +685,7 @@ class PointCNNData(data.Dataset):
 
 
     #
-    # #old pointccnn gt
+    # #old pointcnn gt
     # def __init__(
     #         self,
     #         inp_path=None,

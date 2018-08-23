@@ -15,8 +15,8 @@ Caution! The input dataset was not manually corrected.
 
 import argparse
 import os
-from elektronn3.models.fcn_2d import *
-#from elektronn3.models.tiramisu_2d import FCDenseNet
+#from elektronn3.models.fcn_2d import *
+from elektronn3.models.tiramisu_2d import FCDenseNet
 from elektronn3.models.pointcnn import *
 from elektronn3.data.transforms import RandomFlip
 from elektronn3.data import transforms
@@ -29,8 +29,8 @@ from elektronn3.training.loss import BlurryBoarderLoss, DiceLoss, LovaszLoss
 def get_model():
     vgg_model = VGGNet(model='vgg13', requires_grad=True, in_channels=4)
     #model = FCNs(pretrained_net=vgg_model, n_class=5)
-    # model = FCDenseNet(in_channels=4, n_classes=5)
-    model = FCNs(pretrained_net=vgg_model, n_class=5)
+    model = FCDenseNet(in_channels=4, n_classes=5)
+    #model = FCNs(pretrained_net=vgg_model, n_class=5)
     return model
 
 
