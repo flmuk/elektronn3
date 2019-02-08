@@ -429,7 +429,8 @@ class Trainer:
         running_mean_target = 0
         running_vx_size = 0
         timer = Timer()
-        pbar = tqdm(enumerate(self.train_loader), 'Training', total=len(self.train_loader))
+        pbar = tqdm(enumerate(self.train_loader), 'Training', total=len(self.train_loader),
+                    leave=False)
         for i, (inp, target) in pbar:
             # Everything with a "d" prefix refers to tensors on self.device (i.e. probably on GPU)
             dinp = inp.to(self.device, non_blocking=True)
@@ -509,7 +510,7 @@ class Trainer:
         val_loss = 0
         stats = {name: 0 for name in self.valid_metrics.keys()}
         # TODO: Avoid unnecessary cpu -> gpu -> cpu moves, just save cpu tensors for later
-        for inp, target in tqdm(self.valid_loader, 'Validating'):
+        for inp, target in tqdm(self.valid_loader, 'Validating', leave=False):
             # Everything with a "d" prefix refers to tensors on self.device (i.e. probably on GPU)
             dinp = inp.to(self.device, non_blocking=True)
             dtarget = target.to(self.device, non_blocking=True)

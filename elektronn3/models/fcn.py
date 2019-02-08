@@ -77,7 +77,6 @@ class fcn32s(nn.Module):
             # upscore = nn.ConvTranspose3d(self.n_classes, self.n_classes, 64, stride=32, bias=False)
             # upscore.scale_factor = None
 
-
     def forward(self, x):
         out = self.conv_block1(x)
         out = self.conv_block2(out)
@@ -90,7 +89,6 @@ class fcn32s(nn.Module):
         out = F.upsample(score, x.size()[2:], mode='trilinear')
 
         return out
-
 
     def init_vgg16_params(self, vgg16, copy_fc8=True):
         blocks = [self.conv_block1,
@@ -123,8 +121,8 @@ class fcn32s(nn.Module):
             l2.weight.data = l1.weight.data[:n_class, :].view(l2.weight.size())
             l2.bias.data = l1.bias.data[:n_class]
 
-class fcn16s(nn.Module):
 
+class fcn16s(nn.Module):
     def __init__(self, n_classes=2, learned_billinear=False):
         super(fcn16s, self).__init__()
         self.learned_billinear = learned_billinear
@@ -187,7 +185,6 @@ class fcn16s(nn.Module):
             raise NotImplementedError
             # upscore = nn.ConvTranspose3d(self.n_classes, self.n_classes, 64, stride=32, bias=False)
             # upscore.scale_factor = None
-
 
     def forward(self, x):
         conv1 = self.conv_block1(x)

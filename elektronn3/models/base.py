@@ -12,7 +12,7 @@ import time
 from typing import Union
 from elektronn3.training.train_utils import pretty_string_time
 
-
+# TODO: Refactor into interence/inference.py, currently kept for backwards compat.
 class InferenceModel(object):
     """Class to perform inference using a trained elektronn3 model or nn.Module object.
 

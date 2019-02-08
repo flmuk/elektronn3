@@ -64,10 +64,10 @@ model = UNet(
     batch_norm=True,
     dim=2
 ).to(device)
+
 if not args.disable_trace:
     x = torch.randn(1, 1, 64, 64, device=device)
     model = torch.jit.trace(model, x)
-
 
 
 # USER PATHS

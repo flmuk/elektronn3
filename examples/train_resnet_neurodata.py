@@ -9,6 +9,7 @@
 import argparse
 import os
 import _pickle
+import numpy as np
 
 import torch
 from torch import nn
@@ -66,17 +67,20 @@ from elektronn3.models.resnet import generate_model
 
 torch.backends.cudnn.benchmark = True  # Improves overall performance in *most* cases
 
-model = UNet(
-    n_blocks=3,
-    start_filts=32,
-    planar_blocks=(0,),
-    activation='relu',
-    batch_norm=True,
-    # conv_mode='valid',
-    adaptive=True  # Experimental. Disable if results look weird.
-).to(device)
+# model = UNet(
+#     n_blocks=3,
+#     start_filts=32,
+#     planar_blocks=(0,),
+#     activation='relu',
+#     batch_norm=True,
+#     # conv_mode='valid',
+#     adaptive=True  # Experimental. Disable if results look weird.
+# ).to(device)
 # Example for a model-compatible input.
-example_input = torch.randn(1, 1, 32, 64, 64)
+patch_shape = (1, 1, 8, 256, 256)
+offset = (2, 96, 96)
+model = generate_model(model_depth=10, no_max_pool=True).to(device)
+example_input = torch.randn(*patch_shape)
 
 enable_save_trace = False if args.jit == 'disabled' else True
 if args.jit == 'onsave':
@@ -91,6 +95,11 @@ elif args.jit == 'train':
     tracedmodel = torch.jit.trace(model, example_input.to(device))
     model = tracedmodel
 
+batch_size = 1
+if torch.cuda.device_count() > 1:
+    print("Let's use", torch.cuda.device_count(), "GPUs!")
+    batch_size = batch_size * torch.cuda.device_count()
+    model = nn.DataParallel(model)
 
 # USER PATHS
 save_root = os.path.expanduser('~/e3training/')
@@ -98,7 +107,7 @@ os.makedirs(save_root, exist_ok=True)
 if os.getenv('CLUSTER') == 'WHOLEBRAIN':  # Use bigger, but private data set
     data_root = '/wholebrain/scratch/j0126/barrier_gt_phil/'
     fnames = [f for f in os.listdir(data_root) if f.endswith('.h5')]
-    input_h5data = [(os.path.join(data_root, f), 'raw') for f in fnames]
+    input_h5data = [(os.path.join(data_root, f), 'raW') for f in fnames]
     target_h5data = [(os.path.join(data_root, f), 'labels') for f in fnames]
     valid_indices = [1, 3, 5, 7]
 
@@ -140,17 +149,17 @@ common_transforms = [
     transforms.Normalize(mean=dataset_mean, std=dataset_std)
 ]
 train_transform = transforms.Compose(common_transforms + [
-    # transforms.RandomGrayAugment(channels=[0], prob=0.3),
+    transforms.RandomGrayAugment(channels=[0], prob=0.3),
     # transforms.RandomGammaCorrection(gamma_std=0.25, gamma_min=0.25, prob=0.3),
-    # transforms.AdditiveGaussianNoise(sigma=0.1, channels=[0], prob=0.3),
-    # transforms.RandomBlurring({'probability': 0.5})
+    transforms.AdditiveGaussianNoise(sigma=0.1, channels=[0], prob=0.3),
+    transforms.RandomBlurring({'probability': 0.5})
 ])
 valid_transform = transforms.Compose(common_transforms + [])
 
 # Specify data set
 common_data_kwargs = {  # Common options for training and valid sets.
     'aniso_factor': 2,
-    'patch_shape': (48, 96, 96),
+    'patch_shape': patch_shape[2:],
     # 'offset': (8, 20, 20),
     'num_classes': 2,
 }
@@ -158,6 +167,7 @@ train_dataset = PatchCreator(
     input_h5data=[input_h5data[i] for i in range(len(input_h5data)) if i not in valid_indices],
     target_h5data=[target_h5data[i] for i in range(len(input_h5data)) if i not in valid_indices],
     train=True,
+    offset=offset,
     epoch_size=args.epoch_size,
     warp_prob=0.2,
     warp_kwargs={
@@ -171,6 +181,7 @@ valid_dataset = PatchCreator(
     input_h5data=[input_h5data[i] for i in range(len(input_h5data)) if i in valid_indices],
     target_h5data=[target_h5data[i] for i in range(len(input_h5data)) if i in valid_indices],
     train=False,
+    offset=offset,
     epoch_size=10,  # How many samples to use for each validation run
     warp_prob=0,
     transform=valid_transform,
@@ -180,7 +191,7 @@ valid_dataset = PatchCreator(
 # Use first validation cube for previews. Can be set to any other data source.
 preview_batch = get_preview_batch(
     h5data=input_h5data[valid_indices[0]],
-    preview_shape=(32, 320, 320),
+    preview_shape=patch_shape[2:],
     transform=transforms.Normalize(mean=dataset_mean, std=dataset_std)
 )
 
@@ -215,7 +226,7 @@ trainer = Trainer(
     device=device,
     train_dataset=train_dataset,
     valid_dataset=valid_dataset,
-    batchsize=1,
+    batchsize=batch_size,
     num_workers=1,
     save_root=save_root,
     exp_name=args.exp_name,
@@ -229,8 +240,9 @@ trainer = Trainer(
     apply_softmax_for_prediction=True,
     num_classes=train_dataset.num_classes,
     # TODO: Tune these:
-    preview_tile_shape=(32, 64, 64),
-    preview_overlap_shape=(32, 64, 64),
+    preview_tile_shape=patch_shape[2:],
+    preview_overlap_shape=patch_shape[2:],  # unclear what this is, had the same value as preview_tile_shape
+    ipython_shell=False,
     # mixed_precision=True,  # Enable to use Apex for mixed precision training
 )
 

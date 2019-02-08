@@ -140,7 +140,7 @@ Tensor
     # TODO: Handle fractional inputshape-to-tile ratio
     pbar = tqdm(
         itertools.product(*tile_ranges), 'Predicting',
-        total=num_tiles, disable=not verbose
+        total=num_tiles, disable=not verbose, leave=False,
     )
     for tile_pos in pbar:
         tile_pos = np.array(tile_pos)
@@ -171,7 +171,8 @@ Tensor
         # Slice the relevant tile_shape-sized region out of the model output
         #  so it can be written to the final output
         out_tile = out_tile[final_crop_slice]
-        out[out_slice] = out_tile
+        if np.prod(out_tile.size()):  # else one of the axes is zero..
+            out[out_slice] = out_tile
 
     return out
 
