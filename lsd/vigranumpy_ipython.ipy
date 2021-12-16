@@ -1,0 +1,30 @@
+# coding: utf-8
+import numpy as np
+import vigra as v
+array= np.random.rand(3,20,20,10)
+vigra_array=v.VigraArray(array, axistags=v.defaultAxistags("cxyz"))
+vigra_array.axistags
+vigra_array[0,0,0,:]
+divergence = v.filters.gaussianDivergence(vigra_array)
+divergence
+divergence.shape
+divergence.axistags
+array.shape
+y = np.vstack((array, divergence))
+y.shape
+seg_inds=np.random.choice([0,1], size=(1,20,20,10))
+from scipy import ndimage as im
+labels = im.label(seg_inds)
+vlab=v.taggedView(labels[0], "cxyz")
+vlab.shape
+vlab.axistags
+vdt = v.filters.boundaryVectorDistanceTransform(vlab.astype(np.uint32))
+vdt.shape
+vdt.size
+vdt.axistags
+np.linalg.norm(vdt)
+normalized_vdt=np.linalg.norm(vdt, axis=0)
+normalized_vdt.shape
+vseg=v.taggedView(seg_inds, "cxyz")
+vseg_vdt = v.filters.boundaryVectorDistanceTransform(vseg.astype(np.uint32))
+vdt==vseg_vdt

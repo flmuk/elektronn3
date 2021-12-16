@@ -115,3 +115,6 @@ movement_policy/TestResults/
 
 # VS Code
 .vscode/
+
+# lsd plots
+/u/fkies/new/elektronn3/lsd/plots
