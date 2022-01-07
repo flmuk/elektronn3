@@ -56,6 +56,10 @@ parser.add_argument('-i', '--ipython', action='store_true',
 parser.add_argument('-c', '--criterion', default="L1",type=str,
     help='Loss function'
 )
+parser.add_argument('-f', '--fraction', default="0.3",type=float,
+    help='Maximum fraction of background (label==0) tolerated in each sample'
+)
+
 args = parser.parse_args()
 
 # Set up all RNG seeds, set level of determinism
@@ -65,6 +69,7 @@ np.random.seed(random_seed)
 random.seed(random_seed)
 deterministic = args.deterministic
 criterion_string=args.criterion
+tbfraction = args.fraction
 if deterministic:
     torch.backends.cudnn.deterministic = True
 else:
@@ -191,10 +196,10 @@ dataset_std = (255.,)
 local_shape_descriptor = LSDGaussVdtCom()
 common_transforms = [
     transforms.Normalize(mean=dataset_mean, std=dataset_std),
-#    transforms.AdditiveGaussianNoise(),
-#    transforms.RandomBrightnessContrast(),
-#    transforms.RandomGammaCorrection(),
-#    transforms.RandomFlip(ndim_spatial=3),
+    transforms.AdditiveGaussianNoise(),
+    transforms.RandomBrightnessContrast(),
+    transforms.RandomGammaCorrection(),
+    transforms.RandomFlip(ndim_spatial=3),
     local_shape_descriptor
 
 ]
@@ -211,6 +216,9 @@ common_data_kwargs = {  # Common options for training and valid sets.
     # 'in_memory': True  # Uncomment to avoid disk I/O (if you have enough host memory for the data)
 }
 from new_knossos import KnossosLabelsNozip
+coordinate_history_directory = os.path.join(os.getenv("HOME"),"outputs", args.exp_name)
+os.mkdir(coordinate_history_directory)
+
 train_dataset = KnossosLabelsNozip(
     conf_path_raw_data='/wholebrain/songbird/j0251/j0251_72_clahe2/mag1/knossos.conf',#philipp said to use this dataset
     conf_path_label='/ssdscratch/songbird/j0251/segmentation/j0251_72_seg_20210127_agglo2/knossos.pyk.conf',
@@ -219,7 +227,9 @@ train_dataset = KnossosLabelsNozip(
     epoch_size=args.epoch_size,
     raw_mode='caching',
     raw_cache_size = 64,
-    raw_cache_reuses = 8)
+    raw_cache_reuses = 8,
+    logging_dirname = coordinate_history_directory,
+    threshold_background_fraction=tbfraction)
 
 
 valid_dataset = KnossosLabelsNozip(
@@ -231,7 +241,9 @@ valid_dataset = KnossosLabelsNozip(
     raw_mode='caching',
     raw_cache_size = 64,
     raw_cache_reuses = 8,
-    threshold_background_fraction = 1.0)
+    threshold_background_fraction = 1.0,
+    logging_dirname = coordinate_history_directory,
+    mode = "validation")
 
 # Use first validation cube for previews. Can be set to any other data source.
 preview_batch = get_preview_batch(

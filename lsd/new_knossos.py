@@ -9,6 +9,8 @@ import torch
 import torch.utils.data
 from elektronn3.data import transforms
 from elektronn3.data.knossos import KnossosRawData
+import logging
+
 
 
 class KnossosLabelsNozip(torch.utils.data.Dataset):
@@ -47,11 +49,11 @@ class KnossosLabelsNozip(torch.utils.data.Dataset):
                 the dataset (or the subregion
                 that is constrained by ``bounds``) is pre-loaded into memory on initialization. If ``caching``, cache data
                 from the disk and reuse it. If ``disk``, load data from disk on demand.
-            threshold_background_fraction: float [0.,1.] or None. If a float, this denotes the percentage of background that is tolerated in each sample.
+            threshold_background_fraction: float [0.,1.] or None. If a float, this denotes the fraction of background that is tolerated in each sample.
                 The "empty" voxels, i.e. voxels with value of 0, are counted, and if the fraction of empty voxels exceeds the threshold
                 the sample is skipped and a new one is generated. Default None.
-            save_interval: during the training this object will record all the coordinates of the samples it encountered. these and other
-                meta-data are saved in a dict which is stored in the training directory
+            logging_dirname: optional, string, path where the logfile of this class will be stored if not set to None (default). In the logfile the history of all the samples will be recorded
+            mode: str, "training" (default) or "validation". Important for the logfiles, since two different ones are generate for training and for validation
            """
 
     def __init__(
@@ -73,10 +75,18 @@ class KnossosLabelsNozip(torch.utils.data.Dataset):
             raw_cache_size: int = 50,
             raw_cache_reuses: int = 10,
             threshold_background_fraction: float = 0.05, #maximum fraction of background (segmentation==0) in a sample
-            save_interval: int = None
+            logging_dirname: str = None,
+            mode: str = "training"
 
     ):
 
+        #set up directory of the logfile to track samples loading history
+        if logging_dirname is not None:
+            self.logging_dirname = logging_dirname
+            logging.basicConfig(format="%(relativeCreated)12d [%(asctime)s %(filename)s:%(funcName)20s():%(lineno)s] [%(process)d] %(message)s",
+                    filename=os.path.join(self.logging_dirname,"coordinate_history_{}.txt".format(mode)),
+                    level=logging.DEBUG)
+        
         self.conf_path_label = conf_path_label
         self.conf_path_raw_data = conf_path_raw_data
         self.patch_shape = np.array(patch_shape)
@@ -100,22 +110,10 @@ class KnossosLabelsNozip(torch.utils.data.Dataset):
         self.raw_verbose = raw_verbose
         self.raw_cache_reuses = raw_cache_reuses
         self.raw_cache_size = raw_cache_size
-        self.coordinate_history = []
         self.threshold_background_fraction = threshold_background_fraction
-        self.save_interval = save_interval
         self.epoch = 0
-
-        #set up the saving dictionary for saving in the training folder
-        self.samples_history_dictionary = {}
-        self.samples_history_dictionary["conf_path_label"] = self.conf_path_label
-        self.samples_history_dictionary["conf_path_raw_data"] = self.conf_path_raw_data
-        self.samples_history_dictionary["patch_shape_zyx"] = self.patch_shape
-        self.samples_history_dictionary["save_interval"] = self.save_interval
-        self.samples_history_dictionary["threshold_background_fraction"] = self.threshold_background_fraction        
-        self.samples_history_dictionary["label_offset"] = self.label_offset
-        self.samples_history_dictionary["label_order"] = self.label_order
-        self.samples_history_dictionary["raw_mode"] = self.raw_mode
         
+
         #raw data as input
         #specify no elektronn3 transformation in the raw data loader because transform is applied
         #after loading the data from KnossosRawData, outside of it's scope
@@ -131,6 +129,19 @@ class KnossosLabelsNozip(torch.utils.data.Dataset):
         #labels as target
         self.label_target_loader = knossos_utils.KnossosDataset(self.conf_path_label, show_progress=False)
     
+        #store metadata in the logfile for saving the samples history in the training folder
+        logging.info("conf_path_label: {}".format(self.conf_path_label))
+        logging.info("conf_path_raw_data: {}".format(self.conf_path_raw_data))
+        logging.info("patch_shape_zyx: {}".format(self.patch_shape))
+        logging.info("threshold_background_fraction: {}".format(self.threshold_background_fraction))        
+        logging.info("label_offset: {}".format(self.label_offset))
+        logging.info("label_order: {}".format(self.label_order))
+        logging.info("raw_mode: {}".format(self.raw_mode))
+        logging.info("""
+        ###################### empty line ######################## 
+        """)
+    
+
     def __getitem__(self, index: int) -> Dict[str, torch.Tensor]:
         
         #generate raw-data sample using the __getitem__() method of the KnossosRawData class
@@ -139,7 +150,6 @@ class KnossosLabelsNozip(torch.utils.data.Dataset):
         #anyway and randomly samples a patch within the given bounds (+label_offset)
         #Note 2: the KnossosRawData loader outputs torch.tensor types, so in order to use the data
         #retrieved from KnossosRawData for the elektronn3 transformation one must cast it to numpy array
-
         input_dict = self.inp_raw_data_loader[0]
         coordinate_from_raw = input_dict["offset"]#xyz
 
@@ -151,7 +161,7 @@ class KnossosLabelsNozip(torch.utils.data.Dataset):
                                                     mag = self.mag, datatype = np.int64)
         
         
-        print("label shape: {}".format(label.shape))       
+        #print("label shape: {}".format(label.shape))       
         #count calculate the fraction of empty (value 0 in segmentation) voxels in the sample (segmentation). The loader generates new samples so long until it finds
         #one with a fraction of background lower then the threshold background fraction
         #start = time.time()
@@ -159,22 +169,21 @@ class KnossosLabelsNozip(torch.utils.data.Dataset):
         #end = time.time()
         #print("time to compute nonzero volume of sample: {}s".format(end-start))
         reject_count=0
-        while 1 - np.count_nonzero(label) / self.patch_volume > self.threshold_background_fraction:
+        zero_labels_fraction = 1 - np.count_nonzero(label) / self.patch_volume 
+        while zero_labels_fraction > self.threshold_background_fraction:
             reject_count += 1
+            logging.info("rejected coordinate xyz {}, with fraction {} of labels being ==0 (background)".format(coordinate_from_raw, zero_labels_fraction))
             input_dict = self.inp_raw_data_loader[0]
             coordinate_from_raw = input_dict["offset"]#xyz
             label = self.label_target_loader.load_seg(offset= coordinate_from_raw + self.label_offset, size = self.patch_shape_xyz,
                                                         mag = self.mag, datatype = np.int64)
-        print("reject count: {}".format(reject_count))
+            zero_labels_fraction = 1 - np.count_nonzero(label) / self.patch_volume
+
+        #generate samples history in log file
+        logging.info("sample of accepted coordinate in xyz: {}, with background fraction: {}, number of rejected samples before accepting this one: {}".format(coordinate_from_raw, zero_labels_fraction, reject_count))
+        
         inp = input_dict["inp"].numpy() #czyx
         coordinate_from_raw = input_dict["offset"]
-        
-        self.samples_history_dictionary["epoch {}".format(self.epoch)] =  {"coordinate_raw_xyz": coordinate_from_raw}
-
-        if self.save_interval is not None:
-            if self.epoch % self.save_interval == 0:
-                with open(os.path.join(self.savepath, "samples_history.json"), "w") as f:
-                    json.dump(self.samples_history_dictionary, f)
 
         if self.dim == 2:
             label = label[0]

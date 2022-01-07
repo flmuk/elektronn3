@@ -2,11 +2,12 @@ ERLEDIGT*koordinaten fixen
 die koordinaten die aus der loader-klasse kommen stimmen bzw sind ok. jetz muss man den
 fehler in der visualizer-klasse kommen funktioniert!!!
 
-*trainings starten mit nn data parallel
+GESCHEITERT weil funzt nicht wirklich und keine Ahnung wie das gehen soll ohne jit *trainings starten mit nn data parallel
 
-*plot fixen
+ERLEDIGT*plot fixen
 hier muss noch der quiver plot in die plot_all funktion richtig integriert werden!
 schwarz-weißes quadrat mit vigranumpy testen vector boundary distance transform!
 
-*threshold evaluieren!!
+ERLEDIGT*threshold evaluieren!!
 funktioniert beim loader noch nicht ganz!
+Das Problem war dass der threshold auf den Rohdaten und nicht auf der Segmentierung kalibriert war. Daher war der Threshold viel zu streng.
