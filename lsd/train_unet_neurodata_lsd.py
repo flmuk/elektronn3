@@ -314,18 +314,18 @@ for evaluator in []:
     for c in range(out_channels):
         valid_metrics[f'val_{evaluator.name}_c{c}'] = evaluator(c)
 
-#class CustomLSDLoss(nn.Module):
-#    def __init__(self, lossstr):
-#        super().__init__()
-#        if lossstr == 'L2':
-#            self.criterion = torch.nn.MSELoss()
-#        elif lossstr == 'L1':
-#            self.criterion = torch.nn.L1Loss()
-#        else:
-#            raise NotImplementedError
-#    
-#    def forward(self, out, targ):
-#        return self.criterion(out[:,:3], targ[:,:3]) + self.criterion(out[:,3], targ[:,3]) + self.criterion(out[:,4], targ[:,4]) + self.criterion(torch.norm(out, dim=1, keepdim=True), targ[:,3])
+class CustomLSDLoss(nn.Module):
+    def __init__(self, lossstr):
+        super().__init__()
+        if lossstr == 'L2':
+            self.criterion = torch.nn.MSELoss()
+        elif lossstr == 'L1':
+            self.criterion = torch.nn.L1Loss()
+        else:
+            raise NotImplementedError
+    
+    def forward(self, out, targ):
+        return self.criterion(out[:,:3], targ[:,:3]) + self.criterion(out[:,3], targ[:,3]) + self.criterion(out[:,4], targ[:,4]) + self.criterion(torch.norm(out[:,:3], dim=1, keepdim=False), targ[:,3])
 
 
 if criterion_string == "L1":
@@ -336,7 +336,7 @@ else:
     raise NotImplementedError
 
 
-#criterion = CustomLSDLoss(criterion_string)
+criterion = CustomLSDLoss(criterion_string)
 
 batch_size = 8
 num_workers = 2
