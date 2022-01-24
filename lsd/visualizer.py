@@ -161,7 +161,7 @@ class Visualizer():
         headlength = 2
         inp_slice_seg = self.inp_seg.cpu().detach().numpy()[0,self.z_plot_coord,:,:]
 
-        fig_vdt_quiver, axs = plt.subplots(2,2, figsize=(30,40), sharex = True, sharey = True, dpi = 500)
+        fig_vdt_quiver, axs = plt.subplots(2,2, figsize=(15,20), sharex = True, sharey = True, dpi = 300)
         fig_vdt_quiver.suptitle("BVDT with xy-projection at "+self.suptitle_string, size = 20)#test this with different patch size
         axs[0,0].set_title("target, scale min: {:8.4f}, max: {:8.4f}".format(self.targ_vdt_min, self.targ_vdt_max), fontsize = 15)
         #axs[0,0].imshow(self.targ_vdt_quiver)
@@ -328,7 +328,7 @@ class Visualizer():
 
     def plot_all(self, filename = "all", skip = 1):
         
-        fig, axs = plt.subplots(5,2,figsize=(30,100), dpi=500)
+        fig, axs = plt.subplots(5,2,figsize=(10,33), dpi=300)
 
         fig.suptitle("Model visualization at"+self.suptitle_string, size = 20)#test this with different patch size
 

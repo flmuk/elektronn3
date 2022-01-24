@@ -29,12 +29,12 @@ loader = KnossosLabelsNozip(conf_path_label = conf_path_labels, conf_path_raw_da
 
 data = loader[0]
 #model_path_old = "/wholebrain/scratch/fkies/e3training/lsd/L1_seed0_SGD/model_best.pt"
-model_path_new = "/wholebrain/scratch/fkies/e3training/lsd/L1_seed0_SGD__nocom/model_best.pt"
+model_path_new = "/wholebrain/scratch/fkies/e3training/lsd/L1_seed0_SGD_nocom_cl_persistentworkers_true_modloss_05tb/model_best.pt"
 import numpy as np
 #np.random.seed(0)
 #viz_old = Visualizer(conf_path_labels, conf_path_raw, model_path_old, patch_shape = (70, 150, 200), transform=transform)
 np.random.seed(0)
-viz_new = Visualizer(conf_path_labels, conf_path_raw, model_path_new, patch_shape = (5, 540, 550), transform=transform)
+viz_new = Visualizer(conf_path_labels, conf_path_raw, model_path_new, patch_shape = (60, 100,100), transform=transform)
 
 #viz_old.plot_vdt("old_BVDT")
 #viz_old.plot_vdt_norm("old_norm_BVDT")
@@ -43,15 +43,17 @@ viz_new = Visualizer(conf_path_labels, conf_path_raw, model_path_new, patch_shap
 #viz_old.plot_raw("old_raw")
 viz_new.plot_raw("new_raw")
 viz_new.plot_vdt_quiver("new_vdt_quiver", skip = skip)
-#viz_new.plot_all(skip=skip)
-nplots = 1
-#for count in range(nplots):
-#    viz_new._generate_sample()
-#    viz_new._make_prediction()
+viz_new.plot_all(skip=skip)
+nplots = 5
+for count in range(nplots):
+    viz_new._generate_sample()
+    viz_new._make_prediction()
 #    #viz_new.plot_vdt(str(count) + "new_BVDT")
 #    #viz_new.plot_vdt_norm(str(count) + "new_norm_BVDT")
 #    #viz_new.plot_gauss_div(str(count) +"new_gauss_div")
 #    ##viz_new.plot_com(str(count) +"new_com")
 #    #viz_new.plot_raw(str(count) +"new_raw")
-#    viz_new.plot_all(str(count), skip = skip)
+    viz_new.plot_all(str(count), skip = skip)
+    viz_new.plot_vdt_quiver("new_vdt_quiver_{}".format(nplots), skip=skip)
+    viz_new.plot_raw("new_raw_{}".format(nplots))
 

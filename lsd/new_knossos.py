@@ -141,6 +141,31 @@ class KnossosLabelsNozip(torch.utils.data.Dataset):
         ###################### empty line ######################## 
         """)
     
+    def sample_from_position(coordinates_xyz):
+        offset_xyz = coordinates_xyz
+        input_dict = self.inp_raw_data_loader.load_with_offset_xyz(offset_xyz)
+        coordinate_from_raw = input_dict["offset"]#xyz
+        try:
+            coordinate_from_raw == offset_xyz
+        except:
+            raise ValueError("Coordinate mismatch betw. desired sample and loaded coordinates!")
+        
+        label = self.label_target_loader.load_seg(offset= coordinate_from_raw + self.label_offset, size = self.patch_shape_xyz,
+                                                    mag = self.mag, datatype = np.int64)
+
+        inp = input_dict["inp"].numpy() #czyx
+        coordinate_from_raw = input_dict["offset"]
+
+        sample = {
+            'inp': torch.as_tensor(trafo_inp),#czyx
+            'target': torch.as_tensor(target),#.long(), zyx
+            'coordinate_raw_xyz': coordinate_from_raw,#xyz 
+            'raw_path': self.conf_path_raw_data,
+            'seg_path': self.conf_path_label,
+            'segmentation': torch.as_tensor(label)
+        }
+
+        return sample
 
     def __getitem__(self, index: int) -> Dict[str, torch.Tensor]:
         

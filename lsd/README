@@ -1,5 +1,5 @@
 Konzept: LSD-transfomration des Targets implementieren um dann ein UNET darauf zu trainieren
-1. LSD-transformator wÃhlen
+1. LSD-transformator wï¿½hlen
 2. Implementierung ausarbeiten
     a. Welcher Datentyp waere eine LSD?
         LSD kann man wie eine Elektronn3-transforms-Klasse als Numpy array formulieren
@@ -9,7 +9,7 @@ Konzept: LSD-transfomration des Targets implementieren um dann ein UNET darauf z
         Philipp Schubert sagt: "Zellsegmentierung - da hast du den ganzen Datensatz als GT"
     d. Wie kann man aus dem Datentyp den LSD erstellen?
         Siehe numpy.ndimage paket
-    e. Was ist eine gutes datenformat fÃr den LSD? Es wÃre schÃn
+    e. Was ist eine gutes datenformat fï¿½r den LSD? Es wï¿½re schï¿½n
        ein mehrdimensionales Vektorfeld zu haben in welchem man
        fuer jedes Element im output also im datensatz bzw fuer
        jedes Pixel was gelabelled ist einen array/vektor hat in dem jede komponente eine andere Information ueber das gelabellede objekt hat.
@@ -20,7 +20,7 @@ TO Implement:
 3. vigra gaussian divergence of the vector distance transform (normalized)
 #4. CenterOfMass(Seg) left out because not implemented
 
-LSD transformer funktioniert, als elektronn3-transformation, training läuft
+LSD transformer funktioniert, als elektronn3-transformation, training lï¿½uft
 
 jetzt wichtig: visualisierer schreiben, sodass man ergebnisse betrachten kann.
 wie macht man das?
@@ -28,8 +28,8 @@ wie macht man das?
 *Visualisierer
 
 **was wird im paper wie veranschaulicht? schwer zu sagen, im repository ist es nicht klar und deutlich
-**idee: für 3d vektor-daten werden die rgb-werte aus den distanzen gelesen, also Rot(x) Grün(y) Blau(z)
-also dafür braucht man:
+**idee: fï¿½r 3d vektor-daten werden die rgb-werte aus den distanzen gelesen, also Rot(x) Grï¿½n(y) Blau(z)
+also dafï¿½r braucht man:
 
 **das gespeicherte netz, was geladen werden muss
 ***pfad->pytorch->finde das netz
@@ -37,8 +37,16 @@ also dafür braucht man:
 **das geladene netz muss auf einem geladenen datensatz predictions machen
 ***finde datensatz
 ***lade datensatz in bestimmtes format
-***füttere es durch das netz
+***fï¿½ttere es durch das netz
 ***speichere es
 
-**die predictions müssen für den festen cube zusammen mit den rohdaten geplotted werden.
-***verwende matplotlib dafür
+**die predictions mï¿½ssen fï¿½r den festen cube zusammen mit den rohdaten geplotted werden.
+***verwende matplotlib dafï¿½r
+
+NOW need to increase the field of view by coarse graining. How can this be done?
+literature research:
+*coarse-graining: max-pooling with torch.nn.MaxPool3D
+*have to find formula for the output-shape to match the shape of the patch of raw data!!: din = (dout-1)*stride + dilation*(kernel_size) (from https://pytorch.org/docs/1.9.1/generated/torch.nn.MaxPool3d.html)
+*concept: take input shape of the raw patch, then get the larger patch for the increased field of view, and then feed this into the network -> this should result in a hyperparameter since one should be able to set the size of the patch to be resampled as a function of the kernel size (and maybe the stride?)
+*thus need two subsequent calls to the dataloader, one to get the sample and one to get the coordinates of the sample to be coarse grained
+*this call to the coordinates could be implemented by either an elektronn3 transform or an additional class in the dataloading -> where is the data loaded? if the stride is low (e.g. 1) then the resizing is much less drastic!
